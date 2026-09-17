@@ -1,0 +1,472 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* ---------------------------------------------------------------------
+   Design tokens.
+
+   Brand identity is the indigo → purple gradient (#667eea → #764ba2),
+   used deliberately rather than everywhere: full-strength on primary
+   actions, the sidebar brand mark, and auth screens; as a tint
+   everywhere else, so large surfaces of body text stay easy to read.
+
+   Three status colours carry meaning and are never used decoratively:
+     --accent   (indigo/purple, brand)  evidence you have / primary actions
+     --verified (teal)                  evidence confirmed by an assessment
+     --signal   (amber)                 something missing or needing action
+   Keeping "verified" visually distinct from "matched" is the whole point
+   of the skill-assessment flow, so it gets its own hue rather than a
+   lighter shade of the accent.
+--------------------------------------------------------------------- */
+:root {
+  --brand-1: #667eea;
+  --brand-2: #764ba2;
+  --gradient-brand: linear-gradient(135deg, var(--brand-1) 0%, var(--brand-2) 100%);
+  --gradient-brand-hover: linear-gradient(135deg, #5a6fe0 0%, #6a4291 100%);
+
+  --ink: #1E1B33;
+  --ink-mid: #423F5C;
+  --ink-soft: #5C5876;
+  --ink-faint: #9491AC;
+
+  --canvas: #F6F6FC;
+  --surface: #FFFFFF;
+  --surface-sunk: #EFEFFA;
+  --line: #E3E3F2;
+  --line-strong: #CBCBE6;
+
+  --accent: #667eea;
+  --accent-hover: #5468d4;
+  --accent-soft: #EEF0FD;
+  --accent-line: #C5CCF6;
+
+  --verified: #0F9B8E;
+  --verified-soft: #E3F5F3;
+  --verified-line: #A9DCD6;
+
+  --signal: #C9820A;
+  --signal-soft: #FBF0DA;
+  --signal-line: #E7C583;
+
+  --danger: #D0384A;
+  --danger-soft: #FBE7EA;
+  --danger-line: #EFB9C1;
+
+  --font-heading: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(30, 27, 51, 0.06);
+  --shadow-pop: 0 12px 32px rgba(102, 126, 234, 0.22);
+
+  --sidebar-w: 248px;
+  --content-max: 1120px;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  line-height: 1.16;
+  margin: 0 0 0.5em;
+  color: var(--ink);
+  font-weight: 600;
+}
+h1 { font-size: 2.1rem; font-weight: 700; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 0.98rem; }
+
+p { margin: 0 0 1em; color: var(--ink-soft); max-width: 72ch; }
+p:last-child { margin-bottom: 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+
+/* Visible focus everywhere, including for keyboard users tabbing through
+   cards and list rows (accessibility requirement). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Lets keyboard users jump past the sidebar straight to page content. */
+.skip-link {
+  position: absolute;
+  left: 0.6rem;
+  top: -3rem;
+  z-index: 100;
+  background: var(--ink);
+  color: #fff;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-sm);
+  transition: top 0.14s ease;
+}
+.skip-link:focus { top: 0.6rem; text-decoration: none; }
+
+/* --- Buttons ------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.6em 1.05em;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.btn:active { transform: translateY(0.5px); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-block { width: 100%; }
+.btn-sm { padding: 0.4em 0.75em; font-size: 0.82rem; }
+
+.btn-primary {
+  background: var(--gradient-brand);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(102, 126, 234, 0.35);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--gradient-brand-hover);
+  text-decoration: none;
+  box-shadow: 0 6px 18px rgba(102, 126, 234, 0.45);
+}
+
+.btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-secondary:hover:not(:disabled) { background: var(--surface-sunk); border-color: var(--accent-line); text-decoration: none; }
+
+.btn-quiet { background: transparent; color: var(--ink-mid); border-color: transparent; padding-left: 0.5em; padding-right: 0.5em; }
+.btn-quiet:hover:not(:disabled) { background: rgba(30, 27, 51, 0.06); text-decoration: none; }
+
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #B22D3D; text-decoration: none; }
+
+/* --- Surfaces ------------------------------------------------------ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.35rem 1.5rem;
+}
+.card-tight { padding: 1rem 1.15rem; }
+.card-flush { padding: 0; overflow: hidden; }
+
+.stack { display: grid; gap: 1.1rem; }
+.stack-sm { display: grid; gap: 0.6rem; }
+.row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+.row-between { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.grid-auto { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+
+.muted { color: var(--ink-soft); }
+.hint { font-size: 0.82rem; color: var(--ink-soft); margin: 0; }
+.tiny { font-size: 0.78rem; color: var(--ink-faint); }
+
+/* Section heading with an optional action on the right. Replaces the
+   all-caps mono "eyebrow" label the old design put above everything. */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.7rem;
+  flex-wrap: wrap;
+}
+.section-head h2, .section-head h3 { margin: 0; }
+
+.divider { height: 1px; background: var(--line); border: 0; margin: 1.2rem 0; }
+
+/* --- Forms --------------------------------------------------------- */
+.field { margin-bottom: 1rem; }
+.field:last-child { margin-bottom: 0; }
+.field label {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: var(--ink);
+}
+.field input, .field textarea, .field select {
+  width: 100%;
+  padding: 0.6em 0.75em;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.field input::placeholder, .field textarea::placeholder { color: var(--ink-faint); }
+.field input:focus, .field textarea:focus, .field select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+}
+.field textarea { resize: vertical; min-height: 2.6em; }
+.field-hint { font-size: 0.79rem; color: var(--ink-soft); margin-top: 0.3rem; }
+.field-error { font-size: 0.79rem; color: var(--danger); margin-top: 0.3rem; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.check input { margin-top: 0.22em; flex-shrink: 0; accent-color: var(--accent); }
+
+/* --- Chips --------------------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.22em 0.65em;
+  border-radius: var(--radius-pill);
+  font-size: 0.79rem;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chip-neutral { background: var(--surface-sunk); color: var(--ink-mid); border-color: var(--line); }
+.chip-matched { background: var(--accent-soft); color: var(--accent-hover); border-color: var(--accent-line); }
+.chip-verified { background: var(--verified-soft); color: var(--verified); border-color: var(--verified-line); }
+.chip-gap { background: var(--signal-soft); color: var(--signal); border-color: var(--signal-line); }
+.chip-danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
+
+.chip-set { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
+/* Small dot used in legends to tie a colour to its meaning. */
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-matched { background: var(--accent); }
+.dot-verified { background: var(--verified); }
+.dot-gap { background: var(--signal-line); }
+
+/* --- Meters -------------------------------------------------------- */
+.meter {
+  height: 7px;
+  background: var(--line);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width 0.3s ease; }
+.meter-signal > span { background: var(--signal); }
+
+/* The evidence bar: one segmented strip per recommendation showing what
+   the score is actually made of (verified / self-reported / missing).
+   This is the signature element - it exists to make the number legible,
+   so it is never used as decoration elsewhere. */
+.evidence-bar {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--line);
+}
+.evidence-bar > span { display: block; height: 100%; }
+.evidence-verified { background: var(--verified); }
+.evidence-matched { background: var(--accent); }
+.evidence-gap { background: var(--signal-line); }
+
+.evidence-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 0.5rem;
+  font-size: 0.79rem;
+  color: var(--ink-soft);
+}
+.evidence-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* --- Score display ------------------------------------------------- */
+.score {
+  font-family: var(--font-heading);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--ink);
+}
+.score-lg { font-size: 2.4rem; }
+.score-md { font-size: 1.6rem; }
+.score-unit { font-size: 0.5em; font-weight: 600; color: var(--ink-faint); margin-left: 0.12em; }
+
+/* --- Tables -------------------------------------------------------- */
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.data th, table.data td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); }
+table.data th { font-family: var(--font-heading); font-weight: 600; font-size: 0.82rem; color: var(--ink-mid); }
+table.data tr:last-child td { border-bottom: 0; }
+
+/* --- List rows ----------------------------------------------------- */
+.list { display: grid; }
+.list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.15rem;
+  border-bottom: 1px solid var(--line);
+}
+.list-row:last-child { border-bottom: 0; }
+.list-row-interactive { transition: background 0.12s ease; }
+.list-row-interactive:hover { background: var(--surface-sunk); }
+
+/* --- States -------------------------------------------------------- */
+.skeleton {
+  background: linear-gradient(90deg, var(--line) 25%, #E9E9F5 37%, var(--line) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: var(--radius-xs);
+}
+@keyframes shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+.empty-state {
+  text-align: center;
+  padding: 2.4rem 1.4rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunk);
+}
+.empty-state h3 { margin-bottom: 0.3rem; }
+.empty-state p { margin: 0 auto 1rem; max-width: 44ch; }
+
+.banner {
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.95rem;
+  font-size: 0.88rem;
+  border: 1px solid;
+  margin-bottom: 1rem;
+}
+.banner:last-child { margin-bottom: 0; }
+.banner-error { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-line); }
+.banner-success { background: var(--accent-soft); color: var(--accent-hover); border-color: var(--accent-line); }
+.banner-info { background: var(--verified-soft); color: var(--verified); border-color: var(--verified-line); }
+.banner-warn { background: var(--signal-soft); color: var(--signal); border-color: var(--signal-line); }
+/* Kept for any markup still using the old class name. */
+.error-banner { background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger-line); border-radius: var(--radius-md); padding: 0.75rem 0.95rem; font-size: 0.88rem; margin-bottom: 1rem; }
+
+/* --- Disclosure ---------------------------------------------------- */
+.disclosure > summary {
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 0.55rem 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ink-mid);
+}
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::before {
+  content: '';
+  width: 0; height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.16s ease;
+}
+.disclosure[open] > summary::before { transform: rotate(90deg); }
+.disclosure > summary:hover { color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 14.5px; }
+  h1 { font-size: 1.55rem; }
+  .card { padding: 1.1rem 1.15rem; }
+  .field-row { grid-template-columns: 1fr; gap: 0; }
+  .score-lg { font-size: 2rem; }
+}
+
+/* --- Page header ----------------------------------------------------- */
+.page-header { margin-bottom: 1.6rem; }
+.page-header-desc { margin-top: 0.35rem; }
+.page-header-action { flex-shrink: 0; }
+
+/* --- Career card (CareerCard.jsx) ------------------------------------ */
+.career-card {
+  text-align: left;
+  width: 100%;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+button.career-card {
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+button.career-card:hover { border-color: var(--ink-faint); background: var(--surface-sunk); }
+button.career-card[data-selected] { border-color: var(--accent); background: var(--accent-soft); }
+
+/* --- Stat tile (StatTile.jsx) ----------------------------------------- */
+.stat-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.stat-tile-label { font-size: 0.82rem; color: var(--ink-soft); font-weight: 500; }
+.stat-tile-value { font-family: var(--font-heading); font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; }
+.stat-tile-value-sm { font-size: 1.3rem; }
+
+/* --- Completeness meter (CompletenessMeter.jsx) ------------------------ */
+.completeness {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.completeness-ring {
+  flex-shrink: 0;
+}
+.completeness-body { flex: 1; min-width: 0; }
+.completeness-missing { display: grid; gap: 0.4rem; margin-top: 0.7rem; }
+.completeness-missing-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-size: 0.86rem;
+}

@@ -1,0 +1,29 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is git-ignored — never commit it (see the note about
+# allowed_ssh_cidr below for why that specifically matters here).
+
+aws_region   = "us-east-1"
+project_name = "career-guidance"
+environment  = "prod"
+
+# --- EC2 ---------------------------------------------------------------
+instance_type        = "t3.micro" # verify Free Tier eligibility for YOUR account/region before assuming this is free
+root_volume_size_gb  = 20
+key_pair_name        = "career-guidance-key" # must already exist in this region — see docs/AWS_SETUP_GUIDE.md
+
+# Your current public IP with /32. Find it with:  curl -s https://checkip.amazonaws.com
+# Never set this to "0.0.0.0/0" — that opens SSH to the entire internet.
+allowed_ssh_cidr = "203.0.113.10/32"
+
+# --- Networking ----------------------------------------------------------
+vpc_cidr            = "10.20.0.0/16"
+public_subnet_cidr  = "10.20.1.0/24"
+# availability_zone = "us-east-1a"  # optional — leave commented to auto-pick
+
+# --- S3 (optional) ---------------------------------------------------------
+enable_s3      = false
+s3_bucket_name = "career-guidance-files-changeme" # must be globally unique if enable_s3 = true
+
+# --- CloudWatch ---------------------------------------------------------
+enable_cpu_alarm   = true
+log_retention_days = 14

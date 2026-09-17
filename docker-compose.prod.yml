@@ -1,0 +1,120 @@
+# Production stack for the single-EC2 / low-cost AWS deployment — see
+# docs/AWS_ARCHITECTURE.md. Run on the EC2 instance provisioned by
+# infrastructure/terraform (that Terraform does NOT run this file for
+# you — it only creates the EC2 instance, network, and IAM role; you
+# run this compose file yourself after SSHing in, per
+# docs/AWS_SETUP_GUIDE.md).
+#
+# Differences from the local dev docker-compose.yml (which is for
+# testing the containers on your own machine and is not used on EC2):
+#   - Only `nginx` publishes a host port (80). backend/ml-service/
+#     postgres are reachable only on the internal Docker network
+#     (`expose`, not `ports`) — matches the "don't expose 4000/8000/5432
+#     publicly" requirement.
+#   - `nginx` replaces the frontend's local `serve`-based image: it
+#     serves the React build directly AND reverse-proxies /api to
+#     `backend`, so it IS the architecture's public entry point, not
+#     just a static file host. (It no longer proxies /files — generated
+#     resumes are served only through the authenticated
+#     GET /api/resume/download route now.)
+#   - `restart: unless-stopped` on every service so the stack comes back
+#     up automatically after an EC2 reboot or a container crash.
+#   - Backend/ml-service configuration comes from real .env files on the
+#     EC2 instance (never committed — see backend/.env.example and
+#     ml-service/.env.example), not the placeholder values in
+#     docker-compose.yml's `environment:` block.
+#
+# Not build/run-tested against a live EC2 instance in the environment
+# this project was assembled in — validate end-to-end before relying on
+# it (see docs/AWS_SETUP_GUIDE.md "Deploy the application").
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: career_guidance
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    expose:
+      - '5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d career_guidance']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ml-service:
+    build: ./ml-service
+    restart: unless-stopped
+    env_file: ./ml-service/.env
+    environment:
+      # Feedback ratings are the only training data in the system and
+      # can't be regenerated, so they're stored in Postgres instead of
+      # the container filesystem — a redeploy (`up -d --build`) would
+      # otherwise silently discard every rating collected since the last
+      # build. See ml-service/app/storage/feedback_store.py.
+      FEEDBACK_STORE: postgres
+      FEEDBACK_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/career_guidance
+    volumes:
+      # Trained calibration model (.pkl), plus the JSON fallback log if
+      # Postgres is ever unreachable at startup.
+      - ml_models:/app/app/data/ml_models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - '8000'
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      # Overrides whatever DATABASE_URL/ML_SERVICE_URL is in backend/.env
+      # so these two always point at the Compose service names — every
+      # other var (AUTH_SECRET, ADZUNA_*, STORAGE_DRIVER, S3_*,
+      # CORS_ALLOWED_ORIGINS) comes from backend/.env.
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/career_guidance
+      ML_SERVICE_URL: http://ml-service:8000
+    volumes:
+      # Persists generated resume PDFs (STORAGE_DRIVER=local, the
+      # default — see backend/src/services/storageService.js) across
+      # container recreation/redeploys. Without this, `docker compose
+      # up -d --build` on every redeploy would silently wipe every
+      # previously generated resume, since a rebuilt container starts
+      # with a fresh, empty /app/storage otherwise. Irrelevant once/if
+      # STORAGE_DRIVER=s3 is adopted later, but harmless to leave mounted.
+      # Nothing in here is web-reachable: the files are only readable via
+      # the authenticated GET /api/resume/download route.
+      - backend_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+    expose:
+      - '4000'
+
+  nginx:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      # VITE_API_BASE_URL is intentionally left unset/empty (see
+      # frontend/Dockerfile.prod) — the frontend calls relative /api/...
+      # paths, and this same nginx container proxies them to `backend`.
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  backend_storage:
+  ml_models:

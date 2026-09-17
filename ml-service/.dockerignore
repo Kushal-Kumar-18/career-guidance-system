@@ -1,0 +1,20 @@
+# ML service build context .dockerignore — keeps the image build fast
+# and avoids ever COPYing host artifacts into the image (see root
+# /.dockerignore for the repo-wide version; this one applies when
+# docker-compose builds specifically with context: ./ml-service).
+
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+.git
+*.log
+.pytest_cache
+.DS_Store
+
+# NOTE: do NOT ignore app/data/ml_models/ — the trained .pkl model file
+# must be included in the build context for the service to load it.

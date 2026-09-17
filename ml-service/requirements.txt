@@ -1,0 +1,25 @@
+# Original app pinned scikit-learn==1.3.0 / numpy==1.24.3 / python-Levenshtein==0.21.1.
+# Those exact wheels are not available for Python 3.12 — the versions below
+# are the verified-compatible equivalents for 3.12 (see PHASE1_NOTES.md). If
+# you deploy on Python 3.10/3.11 you can use the original exact pins.
+#
+# Note: pandas is no longer used by the recommendation engine itself
+# (app/engine/*) but is left available for any future data-analysis needs.
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+scikit-learn==1.3.2
+pandas==2.1.4
+numpy==1.26.4
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.27.1
+pydantic==2.9.2
+
+# Only used when FEEDBACK_STORE=postgres (persistent feedback storage —
+# see app/storage/feedback_store.py). The JSON-file store, which is the
+# default and what the test suite uses, needs no database driver, so the
+# service still starts fine if this wheel is unavailable.
+psycopg2-binary==2.9.9
+
+# test-only
+pytest==8.3.3
+httpx==0.27.2

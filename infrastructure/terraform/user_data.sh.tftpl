@@ -1,0 +1,64 @@
+#!/bin/bash
+# Bootstrap script for a fresh Ubuntu 22.04 instance. Runs once at first
+# boot (cloud-init). Installs only what's needed to run
+# docker-compose.prod.yml and ship its logs to CloudWatch — it does not
+# fetch or start the application itself (see ec2.tf's comment on why).
+set -euxo pipefail
+
+apt-get update -y
+apt-get upgrade -y
+
+# --- Docker + Compose plugin -------------------------------------------------
+apt-get install -y ca-certificates curl gnupg git
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+  > /etc/apt/sources.list.d/docker.list
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+usermod -aG docker ubuntu
+
+# --- CloudWatch agent ---------------------------------------------------------
+# Ships Docker's own JSON log files to the log group Terraform created
+# (${log_group_name}). This is simpler than routing every container's
+# stdout through the CloudWatch agent's Docker-log input, and picks up
+# any container without per-service agent config.
+curl -fsSL https://amazoncloudwatch-agent-${aws_region}.s3.${aws_region}.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb \
+  -o /tmp/amazon-cloudwatch-agent.deb
+dpkg -i -E /tmp/amazon-cloudwatch-agent.deb || apt-get install -f -y
+
+cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json << EOF
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/lib/docker/containers/*/*-json.log",
+            "log_group_name": "${log_group_name}",
+            "log_stream_name": "{instance_id}/docker",
+            "timestamp_format": "%Y-%m-%dT%H:%M:%S"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config -m ec2 -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+
+# --- App directory ------------------------------------------------------------
+# Empty on purpose — you `git clone` your repo here yourself over SSH
+# (docs/AWS_SETUP_GUIDE.md "Deploy the application"). Owned by `ubuntu`
+# so no sudo is needed for the clone/compose steps that follow.
+mkdir -p /home/ubuntu/app
+chown ubuntu:ubuntu /home/ubuntu/app
+
+echo "Bootstrap complete: Docker, Compose plugin, and CloudWatch agent installed." > /home/ubuntu/BOOTSTRAP_DONE
+chown ubuntu:ubuntu /home/ubuntu/BOOTSTRAP_DONE

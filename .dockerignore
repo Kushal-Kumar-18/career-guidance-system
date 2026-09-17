@@ -1,0 +1,53 @@
+# =====================================================================
+# Root .dockerignore — applies context-wide when building any of the
+# three services' images (backend/, frontend/, ml-service/ each also
+# inherit these patterns since Docker reads .dockerignore relative to
+# the build context passed to `docker build`).
+# =====================================================================
+
+# Version control
+.git
+.gitignore
+.github
+
+# Secrets — never send real env files into a build context
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules
+npm-debug.log*
+package-lock.json.bak
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+*.egg-info
+
+# Build output (rebuilt inside the image, not copied from host)
+dist
+build
+
+# Local runtime data
+storage
+*.log
+.DS_Store
+
+# Editor/IDE
+.vscode
+.idea
+*.swp
+
+# Docs and project meta (not needed inside containers)
+docs
+*.md
+!README.md
+
+# Test artifacts
+coverage
+.pytest_cache
+.nyc_output

@@ -1,0 +1,16 @@
+# Backend build context .dockerignore — keeps the image build fast and
+# avoids ever COPYing host artifacts into the image (see root
+# /.dockerignore for the repo-wide version; this one applies when
+# docker-compose builds specifically with context: ./backend).
+
+node_modules
+.env
+.env.*
+!.env.example
+.git
+*.log
+storage
+coverage
+.vscode
+.idea
+.DS_Store
