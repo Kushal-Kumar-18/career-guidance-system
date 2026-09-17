@@ -8,7 +8,8 @@ import EmptyState from '../components/EmptyState';
 import PageHeader from '../components/PageHeader';
 import StatTile from '../components/StatTile';
 
-const COLORS = ['#667eea', '#C9820A', '#0F9B8E', '#D0384A', '#5C5876', '#764ba2'];
+const COLORS = ['#7C8CF0', '#F2AC4C', '#35D6BE', '#F1667C', '#9B96BE', '#A98BD6'];
+const AXIS_TICK = { fill: '#9B96BE', fontSize: 11 };
 
 // Real analytics view backed entirely by GET /analytics/dashboard — no
 // hardcoded demo numbers.
@@ -56,10 +57,10 @@ export default function AnalyticsPage() {
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={recommendationsChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={70} />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
-              <Bar dataKey="match" fill="#667eea" radius={[4, 4, 0, 0]} />
+              <XAxis dataKey="name" tick={{ ...AXIS_TICK }} interval={0} angle={-20} textAnchor="end" height={70} />
+              <YAxis domain={[0, 100]} tick={AXIS_TICK} />
+              <Tooltip contentStyle={{ background: '#1D1A38', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10, color: '#EFEDFB' }} labelStyle={{ color: '#EFEDFB' }} itemStyle={{ color: '#C6C2E0' }} />
+              <Bar dataKey="match" fill="#7C8CF0" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
@@ -83,7 +84,7 @@ export default function AnalyticsPage() {
                     <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip contentStyle={{ background: '#1D1A38', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10, color: '#EFEDFB' }} labelStyle={{ color: '#EFEDFB' }} itemStyle={{ color: '#C6C2E0' }} />
               </PieChart>
             </ResponsiveContainer>
           ) : (
@@ -102,11 +103,11 @@ export default function AnalyticsPage() {
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={gameChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-                <XAxis dataKey="name" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="performance" stroke="#667eea" strokeWidth={2} />
-                <Line type="monotone" dataKey="learning" stroke="#C9820A" strokeWidth={2} />
+                <XAxis dataKey="name" tick={AXIS_TICK} />
+                <YAxis domain={[0, 100]} tick={AXIS_TICK} />
+                <Tooltip contentStyle={{ background: '#1D1A38', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 10, color: '#EFEDFB' }} labelStyle={{ color: '#EFEDFB' }} itemStyle={{ color: '#C6C2E0' }} />
+                <Line type="monotone" dataKey="performance" stroke="#7C8CF0" strokeWidth={2} />
+                <Line type="monotone" dataKey="learning" stroke="#F2AC4C" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           ) : (

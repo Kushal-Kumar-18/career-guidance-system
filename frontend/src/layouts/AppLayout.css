@@ -11,6 +11,7 @@
   flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--line);
+  box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
   position: sticky;
   top: 0;
   height: 100vh;
@@ -21,7 +22,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 1.15rem 1.15rem 0.9rem;
-  background: var(--gradient-brand);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 .sidebar-brand {
@@ -29,7 +31,10 @@
   font-weight: 700;
   font-size: 1.02rem;
   letter-spacing: -0.02em;
-  color: #fff;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 .sidebar-close {
@@ -37,12 +42,14 @@
   background: none;
   border: 0;
   cursor: pointer;
-  color: #fff;
+  color: var(--ink-mid);
   opacity: 0.85;
   padding: 0.3rem;
   border-radius: var(--radius-xs);
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
 }
-.sidebar-close:hover { opacity: 1; background: rgba(255, 255, 255, 0.15); }
+.sidebar-close:hover { opacity: 1; background: var(--surface-sunk); color: var(--ink); }
+.sidebar-close svg { width: 20px; height: 20px; display: block; flex-shrink: 0; }
 
 .sidebar-scroll {
   flex: 1;
@@ -68,23 +75,26 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.6rem;
+  padding: 0.5rem 0.6rem 0.5rem calc(0.6rem - 3px);
+  border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--ink-mid);
   font-size: 0.89rem;
   font-weight: 500;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.16s ease;
 }
 .nav-link:hover { background: var(--surface-sunk); color: var(--ink); text-decoration: none; }
 
 .nav-link-active {
   background: var(--accent-soft);
   color: var(--accent-hover);
+  border-left-color: var(--accent);
   font-weight: 600;
 }
 .nav-link-active:hover { background: var(--accent-soft); color: var(--accent-hover); }
 
-.nav-icon { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.85; }
+.nav-icon { width: 17px; height: 17px; flex-shrink: 0; opacity: 0.85; transition: opacity 0.12s ease, transform 0.12s ease; }
+.nav-link:hover .nav-icon { transform: scale(1.08); }
 .nav-link-active .nav-icon { opacity: 1; }
 
 .sidebar-foot {
@@ -133,6 +143,10 @@
   padding: 2rem 2.2rem 4rem;
 }
 
+/* Each route's root element mounts fresh here, so this fires once per
+   navigation without any per-page code. */
+.content-inner > * { animation: page-enter 0.28s ease; }
+
 /* --- Mobile bar + drawer ------------------------------------------- */
 .topbar { display: none; }
 .nav-scrim { display: none; }
@@ -147,8 +161,11 @@
     position: sticky;
     top: 0;
     z-index: 30;
-    background: var(--surface);
+    background: rgba(21, 19, 42, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--line);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
     padding: 0.6rem 0.9rem;
   }
 
@@ -163,6 +180,7 @@
     color: var(--ink);
   }
   .topbar-toggle:hover { background: var(--surface-sunk); }
+  .topbar-toggle svg { width: 20px; height: 20px; display: block; flex-shrink: 0; }
 
   .topbar-brand {
     font-family: var(--font-heading);
@@ -179,8 +197,21 @@
     transform: translateX(-102%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow-pop);
+    /* Hardcoded rather than var(--surface): this drawer needs to be
+       dark and legible on its own regardless of what the shared
+       tokens resolve to elsewhere in the app right now. */
+    background: #15132A;
   }
   .sidebar-open { transform: translateX(0); }
+
+  .sidebar .nav-group-label { color: #8681AC; }
+  .sidebar .nav-link { color: #C6C2E0; }
+  .sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.06); color: #EFEDFB; }
+  .sidebar .nav-link-active { background: rgba(102, 126, 234, 0.18); color: #93A0F4; }
+  .sidebar .nav-link-active .nav-icon { opacity: 1; }
+  .sidebar-foot { border-top-color: rgba(255, 255, 255, 0.08); }
+  .sidebar .account-name { color: #EFEDFB; }
+  .sidebar .account-email { color: #9B96BE; }
 
   .sidebar-close { display: inline-flex; }
 
@@ -189,7 +220,7 @@
     position: fixed;
     inset: 0;
     z-index: 40;
-    background: rgba(30, 27, 51, 0.45);
+    background: rgba(4, 3, 12, 0.65);
   }
 
   .content { grid-column: 1; }

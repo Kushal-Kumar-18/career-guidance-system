@@ -17,38 +17,42 @@
    lighter shade of the accent.
 --------------------------------------------------------------------- */
 :root {
+  color-scheme: dark;
   --brand-1: #667eea;
   --brand-2: #764ba2;
   --gradient-brand: linear-gradient(135deg, var(--brand-1) 0%, var(--brand-2) 100%);
-  --gradient-brand-hover: linear-gradient(135deg, #5a6fe0 0%, #6a4291 100%);
+  --gradient-brand-hover: linear-gradient(135deg, #7688ee 0%, #85579f 100%);
 
-  --ink: #1E1B33;
-  --ink-mid: #423F5C;
-  --ink-soft: #5C5876;
-  --ink-faint: #9491AC;
+  /* Rich dark palette. Base surfaces step from darkest (canvas) to
+     lightest (sunk/hover) in small increments so cards read as raised
+     without ever needing pure black or pure white. */
+  --ink: #EFEDFB;
+  --ink-mid: #C6C2E0;
+  --ink-soft: #9B96BE;
+  --ink-faint: #8681AC;
 
-  --canvas: #F6F6FC;
-  --surface: #FFFFFF;
-  --surface-sunk: #EFEFFA;
-  --line: #E3E3F2;
-  --line-strong: #CBCBE6;
+  --canvas: #0B0A16;
+  --surface: #15132A;
+  --surface-sunk: #1D1A38;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
 
-  --accent: #667eea;
-  --accent-hover: #5468d4;
-  --accent-soft: #EEF0FD;
-  --accent-line: #C5CCF6;
+  --accent: #7C8CF0;
+  --accent-hover: #93A0F4;
+  --accent-soft: rgba(102, 126, 234, 0.16);
+  --accent-line: rgba(102, 126, 234, 0.4);
 
-  --verified: #0F9B8E;
-  --verified-soft: #E3F5F3;
-  --verified-line: #A9DCD6;
+  --verified: #35D6BE;
+  --verified-soft: rgba(53, 214, 190, 0.14);
+  --verified-line: rgba(53, 214, 190, 0.38);
 
-  --signal: #C9820A;
-  --signal-soft: #FBF0DA;
-  --signal-line: #E7C583;
+  --signal: #F2AC4C;
+  --signal-soft: rgba(242, 172, 76, 0.14);
+  --signal-line: rgba(242, 172, 76, 0.38);
 
-  --danger: #D0384A;
-  --danger-soft: #FBE7EA;
-  --danger-line: #EFB9C1;
+  --danger: #F1667C;
+  --danger-soft: rgba(241, 102, 124, 0.14);
+  --danger-line: rgba(241, 102, 124, 0.38);
 
   --font-heading: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -60,8 +64,8 @@
   --radius-lg: 18px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgba(30, 27, 51, 0.06);
-  --shadow-pop: 0 12px 32px rgba(102, 126, 234, 0.22);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 20px 50px rgba(0, 0, 0, 0.55);
 
   --sidebar-w: 248px;
   --content-max: 1120px;
@@ -72,7 +76,16 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--canvas);
+  /* Deep base with soft brand-colour glows in the corners — the same
+     blue/purple gradient used on primary actions and the sidebar
+     header, just diffused and dimmed so it reads as atmosphere behind
+     the (opaque) cards rather than a loud effect. */
+  background:
+    radial-gradient(1100px 650px at 8% -10%, rgba(102, 126, 234, 0.20), transparent 60%),
+    radial-gradient(1000px 600px at 100% 0%, rgba(118, 75, 162, 0.18), transparent 55%),
+    radial-gradient(900px 500px at 50% 110%, rgba(102, 126, 234, 0.08), transparent 60%),
+    var(--canvas);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
@@ -80,6 +93,14 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* Slim, dark-themed scrollbars so the browser default doesn't punch a
+   pale rectangle into an otherwise dark UI. */
+* { scrollbar-color: var(--line-strong) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: var(--radius-pill); border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); background-clip: content-box; }
 
 h1, h2, h3, h4 {
   font-family: var(--font-heading);
@@ -125,7 +146,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   left: 0.6rem;
   top: -3rem;
   z-index: 100;
-  background: var(--ink);
+  background: var(--gradient-brand);
   color: #fff;
   padding: 0.55rem 0.9rem;
   border-radius: var(--radius-sm);
@@ -148,9 +169,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   letter-spacing: -0.005em;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease,
+    box-shadow 0.14s ease, transform 0.14s ease;
 }
-.btn:active { transform: translateY(0.5px); }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0.5px); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-block { width: 100%; }
 .btn-sm { padding: 0.4em 0.75em; font-size: 0.82rem; }
@@ -171,7 +194,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .btn-secondary:hover:not(:disabled) { background: var(--surface-sunk); border-color: var(--accent-line); text-decoration: none; }
 
 .btn-quiet { background: transparent; color: var(--ink-mid); border-color: transparent; padding-left: 0.5em; padding-right: 0.5em; }
-.btn-quiet:hover:not(:disabled) { background: rgba(30, 27, 51, 0.06); text-decoration: none; }
+.btn-quiet:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); text-decoration: none; }
 
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #B22D3D; text-decoration: none; }
@@ -182,7 +205,10 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
 }
+.card:hover { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); border-color: var(--line-strong); }
 .card-tight { padding: 1rem 1.15rem; }
 .card-flush { padding: 0; overflow: hidden; }
 
@@ -261,6 +287,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   font-weight: 500;
   border: 1px solid transparent;
   white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
 }
 .chip-neutral { background: var(--surface-sunk); color: var(--ink-mid); border-color: var(--line); }
 .chip-matched { background: var(--accent-soft); color: var(--accent-hover); border-color: var(--accent-line); }
@@ -297,7 +324,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   overflow: hidden;
   background: var(--line);
 }
-.evidence-bar > span { display: block; height: 100%; }
+.evidence-bar > span { display: block; height: 100%; transition: width 0.35s ease; }
 .evidence-verified { background: var(--verified); }
 .evidence-matched { background: var(--accent); }
 .evidence-gap { background: var(--signal-line); }
@@ -330,6 +357,8 @@ table.data { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 table.data th, table.data td { text-align: left; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--line); }
 table.data th { font-family: var(--font-heading); font-weight: 600; font-size: 0.82rem; color: var(--ink-mid); }
 table.data tr:last-child td { border-bottom: 0; }
+table.data tbody tr { transition: background 0.12s ease; }
+table.data tbody tr:hover { background: var(--surface-sunk); }
 
 /* --- List rows ----------------------------------------------------- */
 .list { display: grid; }
@@ -347,7 +376,7 @@ table.data tr:last-child td { border-bottom: 0; }
 
 /* --- States -------------------------------------------------------- */
 .skeleton {
-  background: linear-gradient(90deg, var(--line) 25%, #E9E9F5 37%, var(--line) 63%);
+  background: linear-gradient(90deg, var(--line) 25%, rgba(255, 255, 255, 0.14) 37%, var(--line) 63%);
   background-size: 400% 100%;
   animation: shimmer 1.4s ease infinite;
   border-radius: var(--radius-xs);
@@ -404,6 +433,15 @@ table.data tr:last-child td { border-bottom: 0; }
 .disclosure[open] > summary::before { transform: rotate(90deg); }
 .disclosure > summary:hover { color: var(--ink); }
 
+/* --- Page entrance --------------------------------------------------
+   Applied structurally (see .content-inner > * and .auth-card) rather
+   than per-page, so every route gets the same quiet fade/rise on
+   mount without each page needing its own markup change. */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
@@ -418,12 +456,61 @@ table.data tr:last-child td { border-bottom: 0; }
   .card { padding: 1.1rem 1.15rem; }
   .field-row { grid-template-columns: 1fr; gap: 0; }
   .score-lg { font-size: 2rem; }
+  .page-header { padding: 1.2rem 1.3rem; border-radius: var(--radius-md); }
 }
 
-/* --- Page header ----------------------------------------------------- */
-.page-header { margin-bottom: 1.6rem; }
-.page-header-desc { margin-top: 0.35rem; }
-.page-header-action { flex-shrink: 0; }
+/* --- Page header -------------------------------------------------------
+   Same brand gradient as the sidebar/topbar mark (var(--gradient-brand)),
+   so every page title reads as a continuation of that brand chrome
+   rather than a separate flat heading dropped on the dark canvas. */
+.page-header {
+  margin-bottom: 1.6rem;
+  padding: 1.6rem 1.85rem;
+  border-radius: var(--radius-lg);
+  background: var(--gradient-brand);
+  box-shadow: 0 14px 34px rgba(102, 126, 234, 0.28);
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+/* A quiet highlight in one corner, echoing the same soft glow used on
+   the body background, so the banner reads as part of the page rather
+   than a flat block of colour pasted on top of it. */
+.page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(480px 220px at 100% 0%, rgba(255, 255, 255, 0.16), transparent 65%);
+  pointer-events: none;
+}
+.page-header:hover { box-shadow: 0 18px 42px rgba(102, 126, 234, 0.36); }
+.page-header .row-between { position: relative; z-index: 1; }
+.page-header h1 { color: #fff; }
+.page-header-desc { margin-top: 0.4rem; color: rgba(255, 255, 255, 0.86); }
+.page-header-action { flex-shrink: 0; position: relative; z-index: 1; }
+
+/* Buttons placed in the header action slot sit on the brand gradient
+   itself now, so they need their own contrast rules rather than the
+   gradient-on-dark-canvas styling used everywhere else. */
+.page-header-action .btn-primary {
+  background: #fff;
+  color: var(--brand-2);
+  box-shadow: 0 4px 14px rgba(11, 10, 22, 0.25);
+}
+.page-header-action .btn-primary:hover:not(:disabled) {
+  background: #f1efff;
+  box-shadow: 0 6px 18px rgba(11, 10, 22, 0.3);
+}
+.page-header-action .btn-secondary {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.page-header-action .btn-secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #fff;
+}
 
 /* --- Career card (CareerCard.jsx) ------------------------------------ */
 .career-card {

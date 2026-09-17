@@ -26,7 +26,7 @@ function Ring({ percent, size = 76 }) {
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         style={{ transition: 'stroke-dashoffset 0.4s ease' }}
       />
-      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fontFamily="var(--font-heading)" fontWeight="700" fontSize="17">
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" fontFamily="var(--font-heading)" fontWeight="700" fontSize="17" fill="var(--ink)">
         {percent}%
       </text>
     </svg>
