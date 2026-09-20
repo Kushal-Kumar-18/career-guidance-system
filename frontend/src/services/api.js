@@ -108,8 +108,14 @@ export const api = {
   generateRecommendations: (topK = 5, opts = {}) =>
     request('/recommendations', { method: 'POST', body: { top_k: topK, source: opts.source, candidate: opts.candidate } }),
   recommendationHistory: () => request('/recommendations/history'),
-  submitRecommendationFeedback: (career, rating) =>
-    request('/recommendations/feedback', { method: 'POST', body: { career, rating } }),
+  // Feedback targets the EXACT recommendation row the user is rating
+  // (its `id`, returned on every item from generateRecommendations) —
+  // not a career name. A career can legitimately appear in more than one
+  // analysis for the same user, and a name-based lookup could silently
+  // attach the rating to the wrong one (see backend recommendationService
+  // .submitFeedback).
+  submitRecommendationFeedback: (recommendationId, rating) =>
+    request('/recommendations/feedback', { method: 'POST', body: { recommendation_id: recommendationId, rating } }),
 
   // skills
   predefinedSkills: () => request('/skills/predefined', { auth: false }),

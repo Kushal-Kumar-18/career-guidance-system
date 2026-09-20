@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAsync } from '../hooks/useAsync';
@@ -20,15 +20,25 @@ const SOURCE_LABELS = {
   merge: 'your profile merged with your uploaded resume',
 };
 
-function FeedbackWidget({ career }) {
+// Rates the EXACT recommendation the user is looking at, by its
+// `recommendationId` (the recommendation_history row id returned by
+// generateRecommendations) — not by career name. The same career can
+// legitimately appear in more than one analysis for this user, and a
+// name-based lookup could silently attach the rating to the wrong one;
+// see backend recommendationService.submitFeedback.
+function FeedbackWidget({ recommendationId }) {
   const [rating, setRating] = useState(null);
   const [status, setStatus] = useState('idle'); // idle | saving | done | error
 
   async function submit(value) {
+    if (!recommendationId) {
+      setStatus('error');
+      return;
+    }
     setRating(value);
     setStatus('saving');
     try {
-      await api.submitRecommendationFeedback(career, value);
+      await api.submitRecommendationFeedback(recommendationId, value);
       setStatus('done');
     } catch (err) {
       setStatus('error');
@@ -82,7 +92,7 @@ function RecommendationCard({ r, rank }) {
         </div>
         <div style={{ textAlign: 'right' }}>
           <div className="score score-md">
-            {Math.round(r.confidence)}<span className="score-unit">% fit</span>
+            {Math.round(r.fit_score ?? r.confidence)}<span className="score-unit">% fit</span>
           </div>
           {r.fit_label && <div className="tiny">{r.fit_label}</div>}
         </div>
@@ -137,6 +147,11 @@ function RecommendationCard({ r, rank }) {
 
       {expanded && (
         <div style={{ marginTop: '0.7rem' }}>
+          {typeof r.rank_score === 'number' && Math.round(r.rank_score) !== Math.round(r.fit_score ?? r.confidence) && (
+            <p className="hint" title="Fit score adjusted by a small, capped amount for job-market relevance and feedback calibration — this is what determines the order below, not the % fit number above.">
+              Overall rank score: {Math.round(r.rank_score)}% (includes market/feedback adjustments)
+            </p>
+          )}
           {r.evidence_strength_label && (
             <p className="hint" title="How reliable the matched skill evidence is on average — separate from how many skills matched.">
               Evidence strength: {r.evidence_strength_label}
@@ -153,7 +168,7 @@ function RecommendationCard({ r, rank }) {
                 : ''}.
             </p>
           )}
-          <FeedbackWidget career={r.career} />
+          <FeedbackWidget recommendationId={r.id} />
         </div>
       )}
     </div>
@@ -169,8 +184,28 @@ export default function RecommendationsPage() {
   const [results, setResults] = useState(null);
   const [usedSource, setUsedSource] = useState('profile');
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Guards the auto-generate effect below against firing more than once
+  // for the same navigation — e.g. React 18 StrictMode double-invoking
+  // effects in development, or any other double-mount. The backend's
+  // per-user advisory lock (recommendationRepository.generateBatch) is
+  // what actually guarantees at most one analysis run gets persisted
+  // even so, but avoiding the duplicate request in the first place is
+  // strictly better than relying on the server to collapse it after the
+  // fact.
+  const autoGenerateRan = useRef(false);
+
+  // The exact { source, candidate } of the most recent generate attempt
+  // — set unconditionally, BEFORE the request, success or failure. This
+  // is what "Retry" replays. `usedSource` (below) is only updated on
+  // SUCCESS and defaults to 'profile', so using it for retry would mean:
+  // a resume_upload analysis that fails on the very first attempt
+  // retries as source='profile' with the candidate dropped entirely —
+  // silently switching to a completely different (and wrong) analysis.
+  // See master prompt Phase 2 section C/D.
+  const lastAttemptRef = useRef({ source: 'profile' });
 
   async function handleGenerate(opts = {}) {
+    lastAttemptRef.current = opts;
     setGenerating(true);
     setGenError(null);
     try {
@@ -190,7 +225,9 @@ export default function RecommendationsPage() {
   // automatically once, then clear the navigation state so a page
   // refresh doesn't repeat it.
   useEffect(() => {
+    if (autoGenerateRan.current) return;
     if (location.state?.source) {
+      autoGenerateRan.current = true;
       handleGenerate({ source: location.state.source, candidate: location.state.candidate });
       navigate(location.pathname, { replace: true, state: null });
     }
@@ -212,7 +249,12 @@ export default function RecommendationsPage() {
         }
       />
 
-      {genError && <ErrorState error={{ message: genError }} onRetry={() => handleGenerate({ source: usedSource })} />}
+      {genError && (
+        <ErrorState
+          error={{ message: genError }}
+          onRetry={() => handleGenerate(lastAttemptRef.current)}
+        />
+      )}
 
       {generating && <LoadingState rows={4} label="Generating recommendations" />}
 
@@ -220,7 +262,7 @@ export default function RecommendationsPage() {
         <div className="stack" style={{ marginBottom: '2rem' }}>
           <p className="hint">Based on {SOURCE_LABELS[usedSource] || 'your profile'}.</p>
           {results.map((r, idx) => (
-            <RecommendationCard key={r.career} r={r} rank={idx} />
+            <RecommendationCard key={r.id ?? r.career} r={r} rank={idx} />
           ))}
         </div>
       )}

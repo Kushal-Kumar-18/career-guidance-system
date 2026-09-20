@@ -25,6 +25,27 @@ def _alnum(s: str) -> str:
     return re.sub(r'[^a-z0-9]', '', s.lower())
 
 
+from functools import lru_cache
+
+
+@lru_cache(maxsize=4096)
+def _word_boundary_pattern(shorter: str) -> 're.Pattern[str]':
+    """Compiled, cached word-boundary pattern for `shorter`.
+
+    Profiling a single scoring request (309 careers) showed re._compile
+    being called ~110k times, over a third of total request time -
+    _word_boundary_contains previously built a fresh pattern string per
+    call and relied on Python's own global re cache, which only holds
+    512 entries: once matching against 309 careers' vocabularies pushes
+    past that, the same `shorter` value gets recompiled over and over
+    instead of reused. Caching by `shorter` directly (which repeats
+    heavily - the same user-entered skill is compared against many
+    careers' skill lists) fixes that without changing what actually
+    gets matched: the pattern itself is unchanged.
+    """
+    return re.compile(r'(?<![a-z0-9])' + re.escape(shorter) + r'(?![a-z0-9])')
+
+
 def _word_boundary_contains(shorter: str, longer: str) -> bool:
     """True if `shorter` appears in `longer` as a whole word/phrase, not
     merely as a substring - this is what stops 'java' from matching inside
@@ -32,7 +53,7 @@ def _word_boundary_contains(shorter: str, longer: str) -> bool:
     letters happen to line up."""
     if not shorter or not longer:
         return False
-    return re.search(r'(?<![a-z0-9])' + re.escape(shorter) + r'(?![a-z0-9])', longer) is not None
+    return _word_boundary_pattern(shorter).search(longer) is not None
 
 
 def _career_domains() -> Dict[str, str]:

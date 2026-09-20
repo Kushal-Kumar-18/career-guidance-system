@@ -23,6 +23,25 @@ def test_health():
     assert "engine_version" in body["model_info"]
 
 
+def test_degraded_health_returns_503_not_200(monkeypatch):
+    """A previous version of this endpoint always returned HTTP 200,
+    even with status:"degraded" in the body, which made Docker's
+    `depends_on: condition: service_healthy` and this service's own
+    Dockerfile HEALTHCHECK (both of which check the status CODE, not the
+    JSON body) unable to ever detect a failed model load. Pins the fix:
+    a degraded predictor must fail the HTTP-level health check too."""
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "get_predictor", lambda: None)
+    monkeypatch.setattr(main_module, "get_load_error", lambda: "simulated load failure")
+
+    res = client.get("/health")
+    assert res.status_code == 503
+    body = res.json()
+    assert body["status"] == "degraded"
+    assert body["model_loaded"] is False
+
+
 def test_recommend_endpoint_returns_explainable_fields():
     payload = {
         "user_profile": {

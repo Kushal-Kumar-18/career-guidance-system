@@ -62,16 +62,27 @@ function loadService() {
       verifiedSkillsForUser: async () => ({ Python: true }),
     },
     '../repositories/recommendationRepository': {
-      insertMany: async (userId, predictions, source) => {
-        insertedRows.push({ userId, source, count: predictions.length });
-        return predictions;
-      },
+      // generate() now writes through the atomic generateBatch() path
+      // (see recommendationService.js / recommendationRepository.js)
+      // instead of calling insertMany/findRecentIdenticalBatch directly.
       // This test exercises distinct sources/candidates per call and
-      // doesn't care about the dedupe path (covered separately in
-      // recommendation-dedupe.test.js), so it's mocked to never find a
-      // match — every call falls through to insertMany, preserving this
+      // doesn't care about the dedupe/locking behavior itself (covered
+      // separately in recommendation-dedupe.test.js), so this mock just
+      // always inserts and hands back rows with an id, preserving this
       // file's existing assertions about insertedRows.
-      findRecentIdenticalBatch: async () => null,
+      generateBatch: async ({ userId, source, predictions, analysisRunId, candidateSnapshot }) => {
+        insertedRows.push({ userId, source, count: predictions.length, analysisRunId, candidateSnapshot });
+        const rows = predictions.map((p, i) => ({
+          id: insertedRows.length * 100 + i,
+          user_id: userId,
+          career_name: p.career,
+          match_score: Math.round(p.confidence ?? 0),
+          source,
+          analysis_run_id: analysisRunId,
+          candidate_snapshot: candidateSnapshot,
+        }));
+        return { rows, reused: false };
+      },
     },
     '../repositories/activityRepository': {
       log: async () => {},
@@ -133,6 +144,15 @@ async function run() {
   assert.equal(lastMlPayload.user_profile.skills.split(', ').length, 5); // 4 profile + Kubernetes, "python" deduped against "Python"
   assert.ok(lastMlPayload.user_profile.projects.includes('Career Guidance System'));
   assert.ok(lastMlPayload.user_profile.projects.includes('Extra project'));
+
+  // --- Every call gets its own analysis-run identity (master prompt
+  // Problems 6/7): each entry in insertedRows came from a distinct
+  // generate() call above, so no two should share an analysisRunId, and
+  // each one's candidateSnapshot should be the shape sent to the ML
+  // client for that same call. ---
+  const runIds = insertedRows.map((r) => r.analysisRunId);
+  assert.equal(new Set(runIds).size, runIds.length, 'every generate() call must get its own analysis_run_id');
+  assert.ok(runIds.every((id) => typeof id === 'string' && id.length > 0));
 
   // --- Error paths ---
   await assert.rejects(

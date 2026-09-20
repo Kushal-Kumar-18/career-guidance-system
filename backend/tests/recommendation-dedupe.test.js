@@ -1,11 +1,19 @@
 // Regression tests for the "duplicate recommendation-history entries"
 // fix: generating an identical set of recommendations moments apart
 // (double-submit, a slow network causing a repeat click, a navigation
-// effect firing twice) must not write a second, redundant batch of rows.
-// A genuinely new or later result must still be recorded normally.
+// effect firing twice) must not write a second, redundant batch of rows
+// — even when the two requests are genuinely concurrent, not just
+// sequential (see the production incident: two analysis runs created
+// ~1ms apart, both with source=merge, both containing exactly the same
+// five careers/scores). A genuinely new or later result must still be
+// recorded normally.
 //
 // No DB/ML service — the repository boundary is mocked with proxyquire,
-// same approach as the other test files here.
+// same approach as the other test files here. The mock's `generateBatch`
+// simulates the real implementation's per-user serialization (a
+// Postgres advisory lock in production; a promise chain per user here)
+// so this test can actually exercise "two requests in flight at once",
+// not just "two requests one after another".
 //
 // Run with: npm test
 
@@ -37,37 +45,56 @@ function loadService({ predictionsQueue, dbState }) {
       verifiedSkillsForUser: async () => ({}),
     },
     '../repositories/recommendationRepository': {
-      insertMany: async (userId, predictions, source) => {
-        const rows = predictions.map((p, i) => ({
-          id: dbState.nextId++,
-          user_id: userId,
-          career_name: p.career,
-          match_score: Math.round(p.confidence ?? 0),
-          source,
-          created_at: new Date(dbState.now),
-        }));
-        dbState.rows.push(...rows);
-        return rows;
-      },
-      // Faithful-enough reimplementation of the real SQL predicate so
-      // this test actually exercises the matching rule (same user,
-      // same source, within the window, identical career+score set)
-      // rather than trivially asserting against a stub.
-      findRecentIdenticalBatch: async (userId, source, predictions, windowSeconds = 20) => {
-        const cutoff = dbState.now - windowSeconds * 1000;
-        const candidates = dbState.rows
-          .filter((r) => r.user_id === userId && r.source === source && r.created_at.getTime() > cutoff)
-          .sort((a, b) => b.created_at - a.created_at)
-          .slice(0, predictions.length);
+      // Faithful-enough reimplementation of generateBatch: dbState.locks
+      // is a per-user promise chain standing in for Postgres's
+      // pg_advisory_xact_lock, and the identical-recent-batch check plus
+      // the insert happen as one atomic step while "holding" it. This is
+      // exactly the guarantee the old code (a SELECT, then separately an
+      // INSERT, as two unsynchronized statements) did not have, and
+      // which let two near-simultaneous real requests both see "nothing
+      // yet" and both insert.
+      generateBatch: async ({ userId, source, predictions, analysisRunId, windowSeconds = 20 }) => {
+        const runExclusive = (fn) => {
+          const next = (dbState.locks[userId] || Promise.resolve()).then(fn, fn);
+          dbState.locks[userId] = next.catch(() => {});
+          return next;
+        };
 
-        if (candidates.length !== predictions.length) return null;
+        return runExclusive(() => {
+          const cutoff = dbState.now - windowSeconds * 1000;
+          const candidates = dbState.rows
+            .filter((r) => r.user_id === userId && r.source === source && r.created_at.getTime() > cutoff)
+            .sort((a, b) => b.created_at - a.created_at)
+            .slice(0, predictions.length);
 
-        const toKey = (career, score) => `${String(career).trim().toLowerCase()}|${Math.round(score ?? 0)}`;
-        const existingKeys = new Set(candidates.map((r) => toKey(r.career_name, r.match_score)));
-        const incomingKeys = new Set(predictions.map((p) => toKey(p.career, p.confidence)));
-        if (existingKeys.size !== incomingKeys.size) return null;
-        for (const k of incomingKeys) if (!existingKeys.has(k)) return null;
-        return candidates;
+          const toKey = (career, score) => `${String(career).trim().toLowerCase()}|${Math.round(score ?? 0)}`;
+
+          let existing = null;
+          if (candidates.length === predictions.length) {
+            const existingKeys = new Set(candidates.map((r) => toKey(r.career_name, r.match_score)));
+            const incomingKeys = new Set(predictions.map((p) => toKey(p.career, p.confidence)));
+            const sameSet =
+              existingKeys.size === incomingKeys.size && [...incomingKeys].every((k) => existingKeys.has(k));
+            if (sameSet) {
+              existing = predictions.map((p) =>
+                candidates.find((r) => toKey(r.career_name, r.match_score) === toKey(p.career, p.confidence))
+              );
+            }
+          }
+          if (existing) return { rows: existing, reused: true };
+
+          const rows = predictions.map((p) => ({
+            id: dbState.nextId++,
+            user_id: userId,
+            career_name: p.career,
+            match_score: Math.round(p.confidence ?? 0),
+            source,
+            analysis_run_id: analysisRunId,
+            created_at: new Date(dbState.now),
+          }));
+          dbState.rows.push(...rows);
+          return { rows, reused: false };
+        });
       },
     },
     '../repositories/activityRepository': {
@@ -81,7 +108,7 @@ const IDENTICAL_RESULT = [
 ];
 
 async function testRapidDuplicateIsCollapsed() {
-  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now() };
+  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now(), locks: {} };
   const service = loadService({
     predictionsQueue: [IDENTICAL_RESULT, IDENTICAL_RESULT],
     dbState,
@@ -104,8 +131,32 @@ async function testRapidDuplicateIsCollapsed() {
   console.log('  duplicate history: rapid identical repeat collapses to one row ✓');
 }
 
+async function testConcurrentRequestsCollapseToOneRun() {
+  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now(), locks: {} };
+  const service = loadService({
+    predictionsQueue: [IDENTICAL_RESULT, IDENTICAL_RESULT],
+    dbState,
+  });
+
+  // Two requests fired back-to-back, neither awaited before the other
+  // starts — the exact "two requests ~1ms apart" scenario observed in
+  // production. Without per-user serialization in generateBatch, both
+  // would see an empty dedupe window and both would insert, producing
+  // two separate analysis runs with identical contents.
+  await Promise.all([
+    service.generate(1, { topK: 5, source: 'profile' }),
+    service.generate(1, { topK: 5, source: 'profile' }),
+  ]);
+
+  assert.equal(dbState.rows.length, 1, 'two near-simultaneous identical requests must still collapse to one row');
+  const runIds = new Set(dbState.rows.map((r) => r.analysis_run_id));
+  assert.equal(runIds.size, 1, 'both concurrent requests must resolve to the same single analysis run');
+
+  console.log('  duplicate history: concurrent identical requests collapse to one run ✓');
+}
+
 async function testDifferentResultIsNotCollapsed() {
-  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now() };
+  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now(), locks: {} };
   const different = [
     { career: 'Backend Developer', confidence: 91, skill_gaps: [], courses: [], reasoning: 'y', user_skills_matched: [] },
   ];
@@ -116,12 +167,17 @@ async function testDifferentResultIsNotCollapsed() {
 
   assert.equal(dbState.rows.length, 2, 'a genuinely different result must still be recorded as its own row');
   assert.equal(dbState.rows[1].career_name, 'Backend Developer');
+  assert.notEqual(
+    dbState.rows[0].analysis_run_id,
+    dbState.rows[1].analysis_run_id,
+    'two genuinely different results must belong to two different analysis runs'
+  );
 
   console.log('  duplicate history: a different result is never collapsed ✓');
 }
 
 async function testDifferentSourceIsNotCollapsed() {
-  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now() };
+  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now(), locks: {} };
   const service = loadService({ predictionsQueue: [IDENTICAL_RESULT, IDENTICAL_RESULT], dbState });
 
   await service.generate(1, { topK: 5, source: 'profile' });
@@ -143,7 +199,7 @@ async function testDifferentSourceIsNotCollapsed() {
 }
 
 async function testOutsideWindowIsNotCollapsed() {
-  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now() };
+  const dbState = { rows: [], activity: [], nextId: 1, now: Date.now(), locks: {} };
   const service = loadService({ predictionsQueue: [IDENTICAL_RESULT, IDENTICAL_RESULT], dbState });
 
   await service.generate(1, { topK: 5, source: 'profile' });
@@ -162,6 +218,7 @@ async function testOutsideWindowIsNotCollapsed() {
 
 module.exports = async function run() {
   await testRapidDuplicateIsCollapsed();
+  await testConcurrentRequestsCollapseToOneRun();
   await testDifferentResultIsNotCollapsed();
   await testDifferentSourceIsNotCollapsed();
   await testOutsideWindowIsNotCollapsed();

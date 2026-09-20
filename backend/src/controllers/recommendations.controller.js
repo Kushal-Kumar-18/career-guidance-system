@@ -19,8 +19,8 @@ const history = asyncHandler(async (req, res) => {
 });
 
 const feedback = asyncHandler(async (req, res) => {
-  const { career, rating } = validateFeedback(req.body);
-  const data = await recommendationService.submitFeedback(req.user.id, { career, rating });
+  const { recommendationId, rating } = validateFeedback(req.body);
+  const data = await recommendationService.submitFeedback(req.user.id, { recommendationId, rating });
   ok(res, data);
 });
 

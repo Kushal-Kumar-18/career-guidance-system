@@ -56,14 +56,16 @@ Base URL (local dev): `http://localhost:4000/api`
 |---|---|---|---|
 | POST | `/recommendations` | Auth | Generate explainable fit-score recommendations for the current user (`top_k` optional, default 5) |
 | GET | `/recommendations/history` | Auth | Past recommendation runs |
-| POST | `/recommendations/feedback` | Auth | Rate a recommendation you actually received (`{ career, rating }`, `rating` 1-5). **Validated against your own recommendation history**: if that career was never recommended to you, this returns `422` rather than accepting the rating — feedback is the only data the calibration model trains on, so it must be traceable to a real recommendation. Rate limited (60/hour). See [AI_ML.md](./AI_ML.md). |
+| POST | `/recommendations/feedback` | Auth | Rate a recommendation you actually received (`{ recommendation_id, rating }`, `rating` 1-5, optional `career` for a client-side sanity check). **Resolved by primary key, scoped to your own recommendation history** — not by career name, since the same career can legitimately appear in more than one of your analysis runs and a name-based lookup could silently attach a rating to the wrong one. Returns `422` if `recommendation_id` doesn't belong to you, doesn't exist, or (if `career` was also supplied) doesn't match the career that id actually refers to. Re-submitting for the same `recommendation_id` replaces the previous rating (latest wins) rather than erroring. Rate limited (60/hour). See [AI_ML.md](./AI_ML.md). |
 
 Each recommendation includes `confidence` (the 0-100 Fit Score, kept
 under this field name for backward compatibility — it is an alignment
 estimate, not a probability), `fit_score`/`fit_label` (a qualitative
 band — Strong/Good/Moderate/Emerging/Limited — alongside the number),
-`readiness_label` (an explicit alias of `fit_label`; see AI_ML.md for
-why this system doesn't compute Readiness as a separate metric),
+`rank_score` (the number actually used to order recommendations —
+`fit_score` plus the small feedback-calibration and market-relevance
+adjustments; see AI_ML.md for why this is kept distinct from `fit_score`
+rather than calling the adjusted number "the fit"),
 `evidence_strength`/`evidence_strength_label` (how reliable the matched
 skill evidence is on average — CLAIMED < INFERRED < VERIFIED — kept
 separate from the Fit Score itself), `excluded_categories` (categories

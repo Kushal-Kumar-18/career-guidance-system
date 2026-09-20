@@ -167,8 +167,22 @@ export default function ResumePage() {
 
   // The reviewed fields ARE the canonical candidate profile at this
   // point (comma-separated strings, same shape ProfilePage uses).
+  //
+  // IMPORTANT: this must send source: 'resume_upload', NOT 'merge'.
+  // "Analyze career from this resume" is the resume-only analysis
+  // action — there is no "merge with my existing profile" choice on
+  // this button, unlike the separate "Apply to my profile" action
+  // below. Sending 'merge' here (as this used to do) makes the backend
+  // union this resume's skills with whatever is already sitting in the
+  // user's saved profile (candidateProfileService.merge is additive —
+  // it never replaces, only adds), so a brand-new, substantially
+  // different resume would keep inheriting skills/domain evidence from
+  // an entirely unrelated earlier resume the user had previously
+  // applied to their profile. That cross-contamination is exactly what
+  // 'resume_upload' avoids: it analyzes ONLY the reviewed resume, with
+  // nothing from the stored profile mixed in.
   function analyzeFromReviewedResume() {
-    navigate('/recommendations', { state: { source: 'merge', candidate: review } });
+    navigate('/recommendations', { state: { source: 'resume_upload', candidate: review } });
   }
 
   // "Apply to my profile": sends the reviewed extraction to the

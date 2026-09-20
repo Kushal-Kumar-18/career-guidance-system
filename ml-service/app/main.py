@@ -11,11 +11,12 @@ Run locally:
 """
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from app.services.predictor_singleton import get_predictor, get_load_error
-from app.data.career_dataset import CAREER_DATABASE
+from app.data.career_dataset import CAREER_DATABASE, DATASET_VERSION
+from app.data import career_metadata
 
 app = FastAPI(title="Career Guidance ML Service", version="0.1.0")
 
@@ -37,7 +38,17 @@ class UserProfile(BaseModel):
 class PredictRequest(BaseModel):
     user_profile: UserProfile
     verified_skills: Dict[str, Any] = Field(default_factory=dict)
-    top_k: int = 5
+    # ge=1: a non-positive top_k must be rejected here, not silently
+    # accepted and passed to recommender.py's `results[:top_k]` — Python
+    # slice semantics treat a negative top_k as "drop the last N items"
+    # (e.g. top_k=-5 on 6 results returns just 1, not "all of them" and
+    # not an error), which is confusing/wrong from the caller's
+    # perspective and could hide the actual best match near the cutoff.
+    # No upper bound: a top_k larger than the dataset already degrades
+    # gracefully to "every career that clears the minimum score
+    # threshold" (see recommender.py), which is the correct behavior for
+    # an intentionally large request, not something to reject.
+    top_k: int = Field(default=5, ge=1)
 
 
 class SkillGapRequest(BaseModel):
@@ -50,12 +61,36 @@ class FeedbackRequest(BaseModel):
     user_profile: UserProfile
     career: str
     rating: float = Field(ge=1, le=5)
+    # Provenance (master prompt Phase 2 section A). Optional so this
+    # endpoint doesn't hard-break for any caller that predates these
+    # fields, but the backend (the only real caller) always sends them
+    # now - see backend/src/services/recommendationService.js
+    # submitFeedback. career_id is deliberately NOT accepted from the
+    # caller: it's derived here from `career` via career_metadata so it
+    # can never drift from what this service considers canonical.
+    recommendation_id: Optional[int] = None
+    analysis_run_id: Optional[str] = None
+    engine_version: Optional[str] = None
+    dataset_version: Optional[str] = None
+    # The verified skills active when the recommendation being rated was
+    # generated (backend sends canonical.verified_skills_used from the
+    # frozen candidate_snapshot — see recommendationService.submitFeedback).
+    # Optional for the same backward-compat reason as the fields above;
+    # retrain_feedback_model() falls back to {} for any record missing
+    # this, same as it always has, rather than erroring on legacy data.
+    verified_skills: Dict[str, Any] = Field(default_factory=dict)
 
 
 @app.get("/health")
-def health():
+def health(response: Response):
     predictor = get_predictor()
     if predictor is None:
+        # 503, not 200: this is what docker-compose's
+        # `depends_on: condition: service_healthy` and this service's own
+        # Dockerfile HEALTHCHECK rely on to detect a failed model load —
+        # a 200 with status:"degraded" in the body only helps a caller
+        # that actually inspects the JSON, not a plain HTTP health check.
+        response.status_code = 503
         return {
             "status": "degraded",
             "model_loaded": False,
@@ -81,7 +116,12 @@ def recommend(req: PredictRequest):
         verified_skills=req.verified_skills,
         top_k=req.top_k,
     )
-    return {"success": True, "data": predictions}
+    info = predictor.get_model_info()
+    return {
+        "success": True,
+        "data": predictions,
+        "meta": {"engine_version": info.get("engine_version"), "dataset_version": info.get("dataset_version")},
+    }
 
 
 @app.post("/predict")
@@ -128,14 +168,22 @@ def feedback(req: FeedbackRequest):
         user_profile=req.user_profile.model_dump(),
         career=req.career,
         rating=req.rating,
+        recommendation_id=req.recommendation_id,
+        analysis_run_id=req.analysis_run_id,
+        engine_version=req.engine_version,
+        dataset_version=req.dataset_version,
+        verified_skills=req.verified_skills,
     )
     return {"success": True, "data": info}
 
 
 # ---------------------------------------------------------------------
 # Career catalog (section "Career Information" of the architecture doc).
-# Node's /api/careers proxies these so the 148-career dataset stays
-# owned by one service instead of being duplicated in JS.
+# Node's /api/careers proxies these so the curated career dataset stays
+# owned by one service instead of being duplicated in JS. See
+# app.data.career_dataset.DATASET_CAREER_COUNT for the actual current
+# count - not hardcoded here, since it changes whenever a career is
+# added or removed.
 # ---------------------------------------------------------------------
 
 @app.get("/careers")
@@ -149,6 +197,8 @@ def list_careers(q: Optional[str] = None, limit: int = 500, offset: int = 0):
     data = [
         {
             "name": name,
+            "career_id": career_metadata.get_career_id(name),
+            "domain": career_metadata.get_domain(name),
             "skills": CAREER_DATABASE[name].get("skills", []),
             "salary_range": CAREER_DATABASE[name].get("salary_range"),
             "job_growth": CAREER_DATABASE[name].get("job_growth"),
@@ -156,7 +206,11 @@ def list_careers(q: Optional[str] = None, limit: int = 500, offset: int = 0):
         }
         for name in page
     ]
-    return {"success": True, "data": data, "meta": {"total": total, "limit": limit, "offset": offset}}
+    return {
+        "success": True,
+        "data": data,
+        "meta": {"total": total, "limit": limit, "offset": offset, "dataset_version": DATASET_VERSION},
+    }
 
 
 @app.get("/careers/{career_name}")
@@ -169,7 +223,16 @@ def get_career(career_name: str):
             career_name, info = match, CAREER_DATABASE[match]
     if info is None:
         raise HTTPException(status_code=404, detail=f"Unknown career: {career_name}")
-    return {"success": True, "data": {"name": career_name, **info}}
+    return {
+        "success": True,
+        "data": {
+            "name": career_name,
+            "career_id": career_metadata.get_career_id(career_name),
+            "domain": career_metadata.get_domain(career_name),
+            "dataset_version": DATASET_VERSION,
+            **info,
+        },
+    }
 
 
 class SkillTextRequest(BaseModel):

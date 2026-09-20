@@ -1,10 +1,14 @@
 -- =====================================================================
 -- Migration 0001 — baseline schema
 --
--- This is the same DDL as ../schema.sql, tracked here as the first
--- entry in migration history (see ./README.md). Applying db/schema.sql
--- directly and applying this file have an identical effect; only one
--- of the two should be run against a given database, not both.
+-- This was the same DDL as ../schema.sql back when this was the only
+-- migration. Five more migrations have landed on top of it since
+-- (0002-0006 in this directory) — schema.sql now reflects 0001 PLUS all
+-- of those, kept in sync by hand each time a migration is added (see
+-- ./README.md). Applying db/schema.sql fresh is meant to be equivalent
+-- to applying 0001 through the latest migration IN ORDER, not to
+-- applying this file alone — this file alone only reproduces the schema
+-- as it existed at THIS point in migration history.
 -- =====================================================================
 --
 -- Career Guidance System — PostgreSQL schema

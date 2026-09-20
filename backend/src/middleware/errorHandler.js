@@ -12,6 +12,7 @@ function errorHandler(err, req, res, next) {
     return res.status(err.status).json({
       success: false,
       error: { message: err.message, ...(err.details ? { details: err.details } : {}) },
+      request_id: req.id,
     });
   }
 
@@ -25,19 +26,24 @@ function errorHandler(err, req, res, next) {
         : err.code === 'LIMIT_UNEXPECTED_FILE'
         ? 'Unexpected file field.'
         : 'Could not process the uploaded file.';
-    return res.status(422).json({ success: false, error: { message } });
+    return res.status(422).json({ success: false, error: { message }, request_id: req.id });
   }
 
   // Postgres unique_violation
   if (err.code === '23505') {
-    return res.status(409).json({ success: false, error: { message: 'Resource already exists.' } });
+    return res.status(409).json({ success: false, error: { message: 'Resource already exists.' }, request_id: req.id });
   }
   // Postgres foreign_key_violation
   if (err.code === '23503') {
-    return res.status(400).json({ success: false, error: { message: 'Referenced resource does not exist.' } });
+    return res
+      .status(400)
+      .json({ success: false, error: { message: 'Referenced resource does not exist.' }, request_id: req.id });
   }
 
-  logger.error('Unhandled error', { message: err.message, stack: err.stack });
+  // request_id here is what lets an operator find this exact failure in
+  // the access log / any upstream (Nginx) log for the same request,
+  // without needing to correlate on timestamps alone (section F).
+  logger.error('Unhandled error', { request_id: req.id, message: err.message, stack: err.stack });
   const status = err.status || 500;
   // In production, unrecognized errors only ever show a generic message
   // to the client (the real detail goes to the server log above) --
@@ -46,7 +52,7 @@ function errorHandler(err, req, res, next) {
   // trip to the server terminal while debugging.
   const message =
     status === 500 ? (env.isProduction ? 'Internal server error' : `Internal server error: ${err.message}`) : err.message;
-  res.status(status).json({ success: false, error: { message } });
+  res.status(status).json({ success: false, error: { message }, request_id: req.id });
 }
 
 module.exports = { notFound, errorHandler };

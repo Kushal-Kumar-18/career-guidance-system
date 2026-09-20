@@ -27,13 +27,15 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from app.data.career_dataset import CAREER_DATABASE, CAREER_SKILL_TIERS
+from app.data.career_dataset import CAREER_DATABASE, CAREER_SKILL_TIERS, DATASET_VERSION
+from app.data import career_metadata
 from app.engine import evidence as ev
 from app.engine import fit_scorer
 from app.engine import market_context
 from app.engine.feedback_model import FeedbackCalibrationModel
 from app.engine.text_match import TextMatcher
 from app.storage.feedback_store import build_feedback_store
+import math
 
 ENGINE_VERSION = "explainable-fit-v1"
 
@@ -47,6 +49,17 @@ MIN_FIT_SCORE_TO_SHOW = 12.0
 # replacement for the transparent fit score - a handful of ratings should
 # never be able to flip a ranking on its own.
 MAX_FEEDBACK_ADJUSTMENT = 6.0
+
+# Soft diversity cap (see _diversify below): at most this fraction of a
+# top_k result set may come from any single domain (app/data/
+# career_metadata.py's data-derived domain, not a hard-coded category
+# list) before later same-domain candidates are deferred behind
+# other-domain ones of comparable score. Deliberately a *soft*, backfilled
+# cap, never a hard "one per domain" rule: if there genuinely aren't
+# enough qualifying careers outside a domain, that domain can still fill
+# the whole list - this only reorders among already-qualifying careers,
+# it never drops one.
+DIVERSITY_DOMAIN_CAP_RATIO = 0.6
 
 
 def _profile_completeness(skills, interests, education, experience_years, certifications, projects) -> float:
@@ -153,29 +166,71 @@ class CareerRecommender:
             if final_score < MIN_FIT_SCORE_TO_SHOW:
                 continue
 
+            # Data-driven relevance gate (master prompt point 2): a career
+            # with ZERO matched skills of any evidence tier can still
+            # clear MIN_FIT_SCORE_TO_SHOW purely from generic
+            # interests/education overlap (interests=15 + education=10
+            # already exceeds the 12.0 floor on their own) - that's
+            # exactly the "generic transferable skills let an unrelated
+            # career dominate" failure mode. This does NOT penalize a
+            # career for missing one or more skills (skill_evidence.gaps
+            # is untouched, and a career with 1 matched skill out of 10
+            # passes fine) - it only excludes the specific case of
+            # literally no skill overlap at all. Uses each career's own
+            # skill list (already in the dataset), not a hard-coded
+            # domain/career rule.
+            if not fit.skill_evidence.matched:
+                continue
+
             outlook = market_context.market_outlook(career_info.get('job_growth'), career_info.get('salary_range'))
 
             reasoning = self._build_reasoning(career_name, fit, experience_years, completeness)
 
             results.append({
                 'career': career_name,
+                # Stable identity independent of the display name (see
+                # app/data/career_metadata.py) — use this, not `career`,
+                # for anything persisted long-term (saved careers,
+                # analysis snapshots) that should survive a rename.
+                'career_id': career_metadata.get_career_id(career_name),
+                'domain': career_metadata.get_domain(career_name),
+                # Which build of the curated dataset produced this result
+                # (a content hash of career_dataset.py — see that file's
+                # DATASET_VERSION) — lets a stored recommendation be
+                # traced back to exactly the data that produced it, even
+                # after the dataset is later edited.
+                'dataset_version': DATASET_VERSION,
+                'engine_version': ENGINE_VERSION,
                 # Kept as `confidence` for backward compatibility with the
                 # existing backend/frontend, but this is the Fit Score
                 # (+ small feedback calibration if active) - an alignment
                 # estimate, not a probability of anything.
                 'confidence': round(final_score, 1),
+                # Same number as `confidence` above, under a name that
+                # says what it actually is (master prompt Phase 2
+                # section D: recommendations must expose fit_score AND
+                # rank_score as distinct concepts). `confidence` is kept
+                # only for backward compatibility with existing
+                # frontend/backend field access - new code should read
+                # `rank_score`, not `confidence`.
+                'rank_score': round(final_score, 1),
                 'fit_score': fit.fit_score,
                 # Qualitative band alongside the number (master prompt
                 # principle 10) - "Strong/Good/Moderate/Emerging/Limited"
-                # rather than implying false precision. Also doubles as
-                # the "Readiness" framing: this system has no separate
-                # data source (e.g. a learning-velocity signal) to tell
-                # "fit" and "current readiness" apart, so rather than
-                # fabricate a second metric, both questions are answered
-                # by the same number, explicitly documented as such (see
-                # docs/AI_ML.md).
+                # rather than implying false precision.
+                #
+                # NOTE: an earlier version of this response also included
+                # a `readiness_label` field set to this exact same value.
+                # The master prompt requires that if a "readiness" concept
+                # is kept, it must represent something DIFFERENT from fit
+                # - and this system has no independent signal (e.g. a
+                # learning-velocity metric) to compute a genuinely
+                # different readiness number from. Rather than fabricate
+                # one just to have a second field, `readiness_label` was
+                # removed outright (grep-checked: nothing in
+                # backend/frontend reads it). `fit_label` is the only
+                # qualitative band this system reports.
                 'fit_label': fit.fit_label,
-                'readiness_label': fit.fit_label,
                 'feedback_adjustment': round(feedback_adjustment, 1),
                 'feedback_calibration_active': self.feedback_model.is_active,
                 # Small, capped secondary ranking signal (max ±3 points) —
@@ -238,8 +293,74 @@ class CareerRecommender:
                 'reasoning': reasoning,
             })
 
+        # Deterministic ranking (point 8): ties broken by career name so
+        # ordering never depends on dict/insertion order or float noise
+        # for two careers that land on the exact same final score.
         results.sort(key=lambda r: (r['confidence'], r['career']), reverse=True)
-        return results[:top_k]
+
+        diversified = self._diversify(results, top_k)
+
+        # Quality guard (point 9) - cheap, structural checks on what's
+        # about to leave the engine, not a re-score. Fails loudly rather
+        # than silently shipping a malformed result, since this is
+        # exactly the kind of defect (a bad career_metadata entry, a
+        # duplicate slipping in) that should never reach an API response.
+        seen = set()
+        for r in diversified:
+            assert r['career'] not in seen, f"duplicate career in results: {r['career']!r}"
+            seen.add(r['career'])
+            assert r['career_id'], f"missing career_id for {r['career']!r}"
+            assert r['domain'], f"missing domain for {r['career']!r}"
+            assert 0.0 <= r['confidence'] <= 100.0, f"confidence out of range for {r['career']!r}: {r['confidence']}"
+            assert 0.0 <= r['fit_score'] <= 100.0, f"fit_score out of range for {r['career']!r}: {r['fit_score']}"
+            assert r['reasoning'], f"missing reasoning for {r['career']!r}"
+
+        return diversified
+
+    def _diversify(self, ranked_results: List[Dict[str, Any]], top_k: int) -> List[Dict[str, Any]]:
+        """Soft domain-diversity re-ranking (point 7): reorders an
+        already-fully-scored, already-sorted list so that near-duplicate
+        career variants from one domain (app/data/career_metadata.py's
+        data-derived grouping - never a hard-coded category list) don't
+        occupy the entire result set purely because that domain happens
+        to be well-represented in the 309-career dataset.
+
+        This is a REORDERING pass only - it never drops a qualifying
+        career and never invents one. Once a domain hits its soft cap,
+        further same-domain candidates are deferred behind (not removed
+        from) the remaining queue, so they still appear if there aren't
+        enough other-domain candidates to fill top_k - a thin dataset in
+        one domain, or a candidate who is a genuine specialist, is never
+        forced into artificial variety.
+        """
+        if top_k <= 1 or len(ranked_results) <= top_k:
+            return ranked_results[:top_k]
+
+        domain_cap = max(1, math.ceil(top_k * DIVERSITY_DOMAIN_CAP_RATIO))
+        picked: List[Dict[str, Any]] = []
+        deferred: List[Dict[str, Any]] = []
+        domain_counts: Dict[Optional[str], int] = {}
+
+        for r in ranked_results:
+            domain = r.get('domain')
+            if domain_counts.get(domain, 0) < domain_cap:
+                picked.append(r)
+                domain_counts[domain] = domain_counts.get(domain, 0) + 1
+            else:
+                deferred.append(r)
+            if len(picked) >= top_k:
+                break
+
+        if len(picked) < top_k:
+            picked.extend(deferred[: top_k - len(picked)])
+
+        # Both `picked` and `deferred` were built by walking
+        # `ranked_results` in its already-sorted order, so re-sorting by
+        # the same key keeps ranking deterministic and score-ordered
+        # (the diversity pass reorders WHICH careers are included, never
+        # the relative order of the ones that are).
+        picked.sort(key=lambda r: (r['confidence'], r['career']), reverse=True)
+        return picked
 
     def _compute_skill_overlap(self, career_name: str, user_profile: Dict[str, Any], verified_skills: Dict[str, Any]):
         skills, _interests, _certs, _edu, _proj, _exp, verified = self._parse_profile(user_profile, verified_skills)
@@ -308,7 +429,17 @@ class CareerRecommender:
         parts.append("This score reflects how closely your profile lines up with this role's typical requirements today; it is not a prediction of hiring outcomes or future success.")
 
         return " ".join(parts)    # -- feedback -------------------------------------------------------
-    def record_user_feedback(self, user_profile: Dict[str, Any], career: str, rating: float) -> Dict[str, Any]:
+    def record_user_feedback(
+        self,
+        user_profile: Dict[str, Any],
+        career: str,
+        rating: float,
+        recommendation_id: Optional[int] = None,
+        analysis_run_id: Optional[str] = None,
+        engine_version: Optional[str] = None,
+        dataset_version: Optional[str] = None,
+        verified_skills: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         entry = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
             'career': career,
@@ -320,7 +451,40 @@ class CareerRecommender:
                 'experience': user_profile.get('experience', 0),
                 'certifications': user_profile.get('certifications', ''),
                 'projects': user_profile.get('projects', ''),
+                # The verified skills active when the RATED recommendation
+                # was generated (caller sends the frozen snapshot's
+                # verified_skills_used, not a fresh lookup — see
+                # backend/src/services/recommendationService.js
+                # submitFeedback). Nested inside user_profile rather than
+                # top-level on `entry` specifically so it round-trips
+                # through BOTH feedback stores identically:
+                # PostgresFeedbackStore.append() only persists this
+                # sub-dict (via its `user_profile` JSONB column) and drops
+                # any other top-level entry key, while JsonFeedbackStore
+                # persists the whole entry either way. Needed so
+                # retrain_feedback_model() below can recompute the same
+                # feature vector that actually produced this
+                # recommendation's score, instead of assuming nothing was
+                # verified. {} for legacy records / callers that predate
+                # this — retrain still works, it just can't credit any
+                # verified evidence for those specific records, same as
+                # before this field existed.
+                'verified_skills': verified_skills or {},
             },
+            # Provenance (master prompt Phase 2 section A): what exact
+            # recommendation/run this rating refers to, and what engine/
+            # dataset build produced it. career_id is derived here, not
+            # accepted from the caller, so it can never disagree with
+            # what this service itself considers the canonical id for
+            # `career`. All of these are None for callers that don't
+            # supply them (e.g. any legacy caller) - retrain_feedback_model
+            # below still works fine on records with no provenance, it's
+            # only used for later auditability, not for scoring.
+            'recommendation_id': recommendation_id,
+            'analysis_run_id': analysis_run_id,
+            'career_id': career_metadata.get_career_id(career),
+            'engine_version': engine_version,
+            'dataset_version': dataset_version,
         }
 
         # Durably persisted before anything else happens - if the
@@ -348,7 +512,18 @@ class CareerRecommender:
             if career not in self.career_db:
                 continue
             profile = rec.get('user_profile', {})
-            skills, interests, certs, edu, proj, exp, verified = self._parse_profile(profile, {})
+            # Reuse the verified-skill evidence captured AT RECORD TIME
+            # (nested in user_profile — see record_user_feedback above and
+            # its comment on why it lives there, not top-level on `rec`)
+            # rather than {} — using {} here silently taught the
+            # calibration model that no skill was ever verified for any
+            # rated recommendation, even when VERIFIED evidence (the
+            # strongest tier — see evidence.py) is exactly what the
+            # original score was built from. {} remains the correct
+            # fallback only for records written before this field existed.
+            skills, interests, certs, edu, proj, exp, verified = self._parse_profile(
+                profile, profile.get('verified_skills', {})
+            )
             fit = fit_scorer.compute_fit(
                 self.matcher, skills, verified, interests, edu, certs, exp, proj, self.career_db[career],
                 career_name=career, skill_tiers_by_career=CAREER_SKILL_TIERS,
@@ -364,6 +539,7 @@ class CareerRecommender:
     def get_model_info(self) -> Dict[str, Any]:
         return {
             'engine_version': ENGINE_VERSION,
+            'dataset_version': DATASET_VERSION,
             'scoring_method': 'transparent rule-based fit score (evidence-weighted, skill-importance-tiered); no ML label is derived from this score',
             'weights': fit_scorer.WEIGHTS,
             'careers': len(self.career_list),

@@ -26,6 +26,7 @@ from app.engine.text_match import TextMatcher
 from app.engine import fit_scorer
 from app.engine import market_context
 from app.predictors.advanced_ml_predictor import AdvancedHybridCareerPredictor
+from app.data.career_dataset import CAREER_COUNT
 
 
 def _predictor(tmp_path):
@@ -124,7 +125,7 @@ def test_market_adjustment_cannot_override_a_real_fit_gap(tmp_path):
         "certifications": "",
         "projects": "Trained and deployed several deep learning models.",
     }
-    results = predictor.predict_career_hybrid(profile, {}, top_k=148)
+    results = predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT)
     by_career = {r['career']: r for r in results}
     strong = by_career.get('AI/ML Engineer')
     weak = by_career.get('Chef/Culinary Expert') or by_career.get('Fashion Designer')
@@ -147,7 +148,7 @@ def test_recommendation_ranking_survives_market_removed(tmp_path):
         "certifications": "",
         "projects": "",
     }
-    results = predictor.predict_career_hybrid(profile, {}, top_k=148)
+    results = predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT)
     # Sort key used by the engine is `confidence` (fit + feedback calibration
     # only) - assert the returned order matches sorting by confidence alone,
     # which would NOT hold if market data silently influenced the sort.
@@ -229,8 +230,8 @@ def test_irrelevant_extra_skill_does_not_reorder_unrelated_careers(tmp_path):
         "projects": "",
     }
     with_extra = dict(base, skills=base["skills"] + ", Cooking")
-    r1 = {r['career']: r['confidence'] for r in predictor.predict_career_hybrid(base, {}, top_k=148)}
-    r2 = {r['career']: r['confidence'] for r in predictor.predict_career_hybrid(with_extra, {}, top_k=148)}
+    r1 = {r['career']: r['confidence'] for r in predictor.predict_career_hybrid(base, {}, top_k=CAREER_COUNT)}
+    r2 = {r['career']: r['confidence'] for r in predictor.predict_career_hybrid(with_extra, {}, top_k=CAREER_COUNT)}
 
     shared_careers = [c for c in r1 if 'chef' not in c.lower() and 'culinary' not in c.lower()]
     changed = [c for c in shared_careers if r1[c] != r2.get(c)]

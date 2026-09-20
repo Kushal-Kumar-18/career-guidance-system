@@ -14,8 +14,19 @@ const ApiError = require('../utils/ApiError');
 function signToken(user) {
   return jwt.sign({ sub: user.id, username: user.username, role: user.role }, env.authSecret, {
     expiresIn: '7d',
+    algorithm: 'HS256',
   });
 }
+
+// Every jwt.verify() call below pins { algorithms: ['HS256'] } explicitly
+// rather than relying on the library's default behavior. Without this,
+// verification trusts whatever algorithm a token's own header claims -
+// the classic algorithm-confusion attack class (e.g. a token crafted
+// with "alg": "none", or - in setups that mix symmetric and asymmetric
+// keys - swapping an RS256 public key in as an HMAC secret). Every
+// legitimate token here is always signed with HS256 (see signToken
+// above), so this pin changes nothing for real users and closes off an
+// entire attack class for free.
 
 function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
@@ -24,7 +35,7 @@ function requireAuth(req, res, next) {
     return next(new ApiError(401, 'Authentication required.'));
   }
   try {
-    const payload = jwt.verify(token, env.authSecret);
+    const payload = jwt.verify(token, env.authSecret, { algorithms: ['HS256'] });
     req.user = { id: payload.sub, username: payload.username, role: payload.role };
     return next();
   } catch (err) {
@@ -47,7 +58,7 @@ function optionalAuth(req, res, next) {
   const [scheme, token] = header.split(' ');
   if (scheme === 'Bearer' && token) {
     try {
-      const payload = jwt.verify(token, env.authSecret);
+      const payload = jwt.verify(token, env.authSecret, { algorithms: ['HS256'] });
       req.user = { id: payload.sub, username: payload.username, role: payload.role };
     } catch (err) {
       // ignore invalid token for optional auth

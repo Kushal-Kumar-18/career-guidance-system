@@ -51,9 +51,55 @@ async function query(text, params) {
   }
 }
 
+// Same encoding-fallback behavior as `query`, but against a specific
+// checked-out client rather than the pool -- for use inside
+// `withTransaction`, where every statement in the transaction has to
+// run on the same connection.
+async function queryWith(client, text, params) {
+  const safeParams = sanitizeParams(params);
+  try {
+    return await client.query(text, safeParams);
+  } catch (err) {
+    if (err.code === UNTRANSLATABLE_CHARACTER) {
+      logger.warn('Retrying transactional query after stripping non-WIN1252 characters', { code: err.code });
+      const forced = Array.isArray(safeParams)
+        ? safeParams.map((p) => (typeof p === 'string' ? p.replace(/[^\x00-\xff]/g, '?') : p))
+        : safeParams;
+      return await client.query(text, forced);
+    }
+    throw err;
+  }
+}
+
+// Runs `fn(client)` inside a single BEGIN/COMMIT transaction on one
+// checked-out connection, rolling back on any error. This is what makes
+// recommendationRepository.generateBatch's "take a per-user advisory
+// lock, then check-for-a-duplicate-and-insert" sequence atomic across
+// concurrent requests -- see the migration/comment in
+// recommendationRepository.js for why that matters (the duplicate
+// near-simultaneous analysis runs observed in production).
+async function withTransaction(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      logger.error('Rollback failed', { message: rollbackErr.message });
+    }
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function healthCheck() {
   const result = await pool.query('SELECT 1 AS ok');
   return result.rows[0].ok === 1;
 }
 
-module.exports = { pool, query, healthCheck };
+module.exports = { pool, query, queryWith, withTransaction, healthCheck };

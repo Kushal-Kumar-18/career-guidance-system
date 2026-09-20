@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 
 const routes = require('./routes');
+const requestId = require('./middleware/requestId');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { limiters } = require('./middleware/rateLimit');
 const env = require('./config/env');
@@ -16,6 +17,14 @@ const app = express();
 app.set('trust proxy', env.trustProxyHops);
 
 app.use(helmet({ crossOriginResourcePolicy: false }));
+
+// Observability (section F): assigns/propagates req.id BEFORE the
+// access-log line and every downstream handler, so request_id can be
+// used consistently across the response header, the access log, and any
+// error log line for this request — see middleware/requestId.js.
+app.use(requestId);
+morgan.token('id', (req) => req.id);
+
 // Locked to specific origins in production via CORS_ALLOWED_ORIGINS
 // (comma-separated, e.g. the S3 static-site/CloudFront URL); wide open
 // in local dev where no origins are configured. See docs/AWS_ARCHITECTURE.md.
@@ -34,7 +43,15 @@ app.use(
   )
 );
 app.use(express.json());
-app.use(morgan(env.nodeEnv === 'development' ? 'dev' : 'combined'));
+// Access log includes the request id (:id) alongside the standard
+// method/url/status/timing fields — never the request body/headers, so
+// nothing here can leak an Authorization token, a password, or resume
+// content (see docs/SECURITY.md "safe logging").
+const accessLogFormat =
+  env.nodeEnv === 'development'
+    ? ':id :method :url :status :response-time ms'
+    : ':id :remote-addr - :method :url HTTP/:http-version :status :res[content-length] ":referrer" ":user-agent" :response-time ms';
+app.use(morgan(accessLogFormat));
 
 // NOTE: there is deliberately NO static file route here.
 //

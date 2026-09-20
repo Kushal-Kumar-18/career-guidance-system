@@ -14,6 +14,7 @@ score itself, fabricated probabilities, runaway bonuses).
 import re
 
 from app.engine import fit_scorer
+from app.data.career_dataset import CAREER_COUNT
 
 
 def get(results, career):
@@ -31,7 +32,7 @@ class TestScoreBounds:
              'certifications': 'RN License', 'projects': 'Patient care rotations.'},
         ]
         for profile in profiles:
-            results = predictor.predict_career_hybrid(profile, {}, top_k=148)
+            results = predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT)
             for r in results:
                 assert 0.0 <= r['confidence'] <= 100.0
                 assert 0.0 <= r['fit_score'] <= 100.0
@@ -59,7 +60,7 @@ class TestScoreBounds:
 
     def test_empty_profile_scores_very_low(self, predictor):
         profile = {'skills': '', 'education': '', 'interests': '', 'experience': 0, 'certifications': '', 'projects': ''}
-        results = predictor.predict_career_hybrid(profile, {}, top_k=148)
+        results = predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT)
         # An empty profile has no evidence at all - nothing should score
         # more than a small amount above zero, and it should not produce
         # a long list of confident-looking matches.
@@ -110,9 +111,9 @@ class TestEvidenceEffects:
             'certifications': '',
             'projects': 'Analyzed data using Python.',
         }
-        unverified = get(predictor.predict_career_hybrid(profile, {}, top_k=148), 'Data Scientist')
+        unverified = get(predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT), 'Data Scientist')
         verified = get(
-            predictor.predict_career_hybrid(profile, {'python': True, 'sql': True}, top_k=148), 'Data Scientist'
+            predictor.predict_career_hybrid(profile, {'python': True, 'sql': True}, top_k=CAREER_COUNT), 'Data Scientist'
         )
         assert verified['fit_score'] >= unverified['fit_score']
 
@@ -128,8 +129,8 @@ class TestEvidenceEffects:
         with_edu = {**base_profile, 'education': info['education'][0]}
         without_edu = {**base_profile, 'education': ''}
 
-        r_with = get(predictor.predict_career_hybrid(with_edu, {}, top_k=148), 'Chartered Accountant')
-        r_without = get(predictor.predict_career_hybrid(without_edu, {}, top_k=148), 'Chartered Accountant')
+        r_with = get(predictor.predict_career_hybrid(with_edu, {}, top_k=CAREER_COUNT), 'Chartered Accountant')
+        r_without = get(predictor.predict_career_hybrid(without_edu, {}, top_k=CAREER_COUNT), 'Chartered Accountant')
         assert r_with['fit_score'] > r_without['fit_score']
 
     def test_relevant_project_content_increases_score_over_blank_project(self, predictor, career_db):
@@ -144,8 +145,8 @@ class TestEvidenceEffects:
         with_project = {**base_profile, 'projects': f"Built a website using {', '.join(info['skills'][:3])}."}
         without_project = {**base_profile, 'projects': ''}
 
-        r_with = get(predictor.predict_career_hybrid(with_project, {}, top_k=148), 'Web Developer')
-        r_without = get(predictor.predict_career_hybrid(without_project, {}, top_k=148), 'Web Developer')
+        r_with = get(predictor.predict_career_hybrid(with_project, {}, top_k=CAREER_COUNT), 'Web Developer')
+        r_without = get(predictor.predict_career_hybrid(without_project, {}, top_k=CAREER_COUNT), 'Web Developer')
         assert r_with['fit_score'] > r_without['fit_score']
 
     def test_experience_increases_score_monotonically(self, predictor, career_db):
@@ -160,7 +161,7 @@ class TestEvidenceEffects:
                 'certifications': '',
                 'projects': '',
             }
-            r = get(predictor.predict_career_hybrid(profile, {}, top_k=148), 'Business Analyst')
+            r = get(predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT), 'Business Analyst')
             scores.append(r['fit_score'])
         assert scores == sorted(scores)
 
@@ -215,7 +216,7 @@ class TestExplainability:
             'certifications': '',
             'projects': '',
         }
-        r = get(predictor.predict_career_hybrid(profile, {}, top_k=148), 'Data Scientist')
+        r = get(predictor.predict_career_hybrid(profile, {}, top_k=CAREER_COUNT), 'Data Scientist')
         assert r is not None
         for skill in info['skills'][:3]:
             assert skill in r['reasoning'] or skill in r['user_skills_matched']

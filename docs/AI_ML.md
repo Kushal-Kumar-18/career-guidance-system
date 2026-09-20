@@ -389,7 +389,7 @@ career into the ranking logic.
 
 The master prompt asks for five separable concepts: Fit, Evidence
 Strength, Market Relevance, Readiness, and Skill Gap. Four of these are
-now distinct fields (`fit_score`/`fit_label`, `evidence_strength`/
+distinct fields (`fit_score`/`fit_label`, `evidence_strength`/
 `evidence_strength_label`, `market_outlook` for Market Relevance,
 `skill_gaps`/`skill_gaps_by_tier` for Skill Gap). **Readiness is
 deliberately NOT a fifth, separately-computed number** — this system has
@@ -397,11 +397,29 @@ no data source that would meaningfully distinguish "how well you match
 today" (Fit) from "how ready you are today" beyond the same evidence
 already used for Fit (e.g. a genuine readiness signal would need
 something like recent learning velocity or a timeline, which isn't
-collected). Rather than fabricate a second metric from the same inputs
-just to have five numbers, `readiness_label` is exposed as an explicit
-alias of `fit_label`, documented here as such — per master prompt section
-25's instruction to document *why* an approach (or non-approach) was
-chosen, this is that documentation.
+collected).
+
+An earlier version of this response exposed a `readiness_label` field
+set to the exact same value as `fit_label`, documented at the time as
+"deliberately answering both questions with the same number." That
+still amounted to presenting one number under two names, which fails
+the actual requirement — a kept "readiness" concept must represent
+something *different* from fit, not the same number relabeled.
+`readiness_label` has been removed outright rather than kept as a
+duplicate; `fit_label` is the only qualitative band this system reports.
+If a genuine Readiness signal is added later (e.g. from a learning
+velocity or timeline feature), it belongs as its own field once there is
+real data behind it, not as an alias.
+
+Separately, `rank_score` (in the API response, next to `fit_score`) is
+NOT the same concept and should not be confused with Readiness: it is
+`fit_score` plus the small, capped feedback-calibration and
+market-relevance adjustments — the number recommendations are actually
+sorted by. It's exposed as its own field (rather than only as the
+legacy `confidence` field name) so a consumer can tell "pure candidate/
+career fit" apart from "the number used to rank," per the master
+prompt's requirement that an opaque composite ranking number not be
+presented as if it were the fit score itself.
 
 ### What was deliberately NOT done in this pass
 

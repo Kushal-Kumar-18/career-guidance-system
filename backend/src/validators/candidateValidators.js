@@ -57,14 +57,23 @@ function validateSource(source) {
   return source;
 }
 
-// Validates a POST /api/recommendations/feedback body: a career name the
-// user was actually shown, plus a 1-5 satisfaction rating.
+// Validates a POST /api/recommendations/feedback body: the id of a
+// recommendation row the user was actually shown, plus a 1-5
+// satisfaction rating.
+//
+// This used to accept a `career` name instead of an id and resolve it
+// server-side to "the latest recommendation_history row for this user
+// with that career name" — which silently picks the wrong analysis run
+// whenever the same career appears in more than one (e.g. rating an
+// older recommendation after a newer analysis exists). Requiring the
+// exact row id here, and looking it up by primary key in
+// recommendationService.submitFeedback, removes that ambiguity entirely.
 function validateFeedback(body) {
-  const career = body?.career;
+  const recommendationId = Number(body?.recommendation_id);
   const rating = Number(body?.rating);
   const errors = {};
-  if (typeof career !== 'string' || !career.trim()) {
-    errors.career = 'career is required.';
+  if (!Number.isInteger(recommendationId) || recommendationId <= 0) {
+    errors.recommendation_id = 'recommendation_id is required and must reference a recommendation you were shown.';
   }
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
     errors.rating = 'rating must be a number between 1 and 5.';
@@ -72,7 +81,7 @@ function validateFeedback(body) {
   if (Object.keys(errors).length) {
     throw new ApiError(422, 'Validation failed', errors);
   }
-  return { career: career.trim(), rating };
+  return { recommendationId, rating };
 }
 
 module.exports = { validateCandidateProfile, validateSource, validateFeedback, VALID_SOURCES };

@@ -237,14 +237,31 @@ async function testSyntheticPostingsExcluded() {
 }
 
 // ---------------------------------------------------------------------
-// Fix 5 — feedback is only accepted for a recommendation the user
-// actually received.
+// Fix 5 — feedback is only accepted for the EXACT recommendation the
+// user actually received, resolved by id (not by career name — see
+// master prompt Problem 5: a career-name lookup can resolve to the
+// wrong analysis run whenever the same career appears in more than
+// one).
 // ---------------------------------------------------------------------
 async function testFeedbackRequiresRealRecommendation() {
   const sentToMl = [];
   const activity = [];
   const historyRows = [
-    { id: 11, user_id: 1, career_name: 'Backend Developer', created_at: '2026-01-01T00:00:00Z' },
+    {
+      id: 11,
+      user_id: 1,
+      career_name: 'Backend Developer',
+      analysis_run_id: 'run-a',
+      candidate_snapshot: {
+        education: 'B.Tech',
+        skills: 'Python',
+        interests: 'Backend',
+        experience_years: 2,
+        certifications: '',
+        projects: '',
+      },
+      created_at: '2026-01-01T00:00:00Z',
+    },
   ];
 
   const service = proxyquire('../src/services/recommendationService', {
@@ -272,45 +289,55 @@ async function testFeedbackRequiresRealRecommendation() {
     '../repositories/recommendationRepository': {
       insertMany: async () => [],
       listByUser: async () => historyRows,
-      findLatestForUserAndCareer: async (userId, career) =>
-        historyRows.find(
-          (r) => r.user_id === userId && r.career_name.toLowerCase() === String(career).trim().toLowerCase()
-        ) || null,
+      findByIdForUser: async (userId, recommendationId) =>
+        historyRows.find((r) => r.user_id === userId && r.id === recommendationId) || null,
+      getAnalysisRun: async () => null,
+      recordFeedback: async () => {},
     },
     '../repositories/activityRepository': { log: async (...args) => activity.push(args) },
   });
 
-  // A career this user was never recommended is refused...
+  // A recommendation id this user was never shown is refused...
   await assert.rejects(
-    () => service.submitFeedback(1, { career: 'Neurosurgeon', rating: 5 }),
-    /only rate a career that was actually recommended/,
-    'Feedback for an un-recommended career must be rejected — it is the only training signal in the system.'
+    () => service.submitFeedback(1, { recommendationId: 999, rating: 5 }),
+    /only rate a recommendation that was actually shown/,
+    'Feedback for an unknown recommendation id must be rejected — it is the only training signal in the system.'
   );
   assert.equal(sentToMl.length, 0, 'Rejected feedback must never reach the ML service.');
 
-  // ...and another user cannot rate someone else's recommendation.
+  // ...and another user cannot rate someone else's recommendation, even
+  // by guessing a valid id — the lookup is scoped to their own user_id.
   await assert.rejects(
-    () => service.submitFeedback(2, { career: 'Backend Developer', rating: 5 }),
-    /only rate a career that was actually recommended/
+    () => service.submitFeedback(2, { recommendationId: 11, rating: 5 }),
+    /only rate a recommendation that was actually shown/
   );
   assert.equal(sentToMl.length, 0);
 
-  // A genuine one goes through, and forwards the STORED career name.
-  const result = await service.submitFeedback(1, { career: '  backend developer ', rating: 4 });
+  // A genuine one goes through, forwards the STORED career name, and
+  // uses the candidate evidence CAPTURED WITH that recommendation
+  // (candidate_snapshot) rather than re-deriving it from the current
+  // profile.
+  const result = await service.submitFeedback(1, { recommendationId: 11, rating: 4 });
   assert.deepEqual(result, { ok: true });
   assert.equal(sentToMl.length, 1);
   assert.equal(
     sentToMl[0].career,
     'Backend Developer',
-    'The stored career name must be forwarded, not the client-supplied string.'
+    'The stored career name must be forwarded, not a client-supplied string.'
   );
   assert.equal(sentToMl[0].rating, 4);
+  assert.equal(
+    sentToMl[0].user_profile.skills,
+    'Python',
+    'Feedback must use the candidate evidence captured with this exact recommendation.'
+  );
 
   const feedbackLog = activity.find((a) => a[1] === 'recommendation_feedback');
   assert.ok(feedbackLog, 'Feedback should be logged as activity.');
   assert.equal(feedbackLog[2].recommendation_id, 11);
+  assert.equal(feedbackLog[2].analysis_run_id, 'run-a');
 
-  console.log('  fix 5: feedback validated against recommendation history ✓');
+  console.log('  fix 5: feedback validated against the exact recommendation, by id ✓');
 }
 
 // ---------------------------------------------------------------------

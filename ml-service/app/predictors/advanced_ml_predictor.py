@@ -39,7 +39,7 @@ class AdvancedHybridCareerPredictor:
     """Thin adapter preserving the old public surface:
     - predict_career_hybrid(user_profile, verified_skills, top_k)
     - _compute_skill_overlap(career_name, user_profile, verified_skills)
-    - record_user_feedback(user_profile, career, rating)
+    - record_user_feedback(user_profile, career, rating, recommendation_id=None, analysis_run_id=None, engine_version=None, dataset_version=None)
     - get_model_info() / get_ml_model_info()
     - .ml.{_normalize_text, _normalize_skill_for_matching, _expand_skill}
       (used directly by main.py's /extract-skills and /normalize-skills)
@@ -64,8 +64,15 @@ class AdvancedHybridCareerPredictor:
     def _compute_skill_overlap(self, career_name, user_profile, verified_skills):
         return self._engine._compute_skill_overlap(career_name, user_profile, verified_skills)
 
-    def record_user_feedback(self, user_profile, career, rating):
-        return self._engine.record_user_feedback(user_profile, career, rating)
+    def record_user_feedback(self, user_profile, career, rating, recommendation_id=None, analysis_run_id=None, engine_version=None, dataset_version=None, verified_skills=None):
+        return self._engine.record_user_feedback(
+            user_profile, career, rating,
+            recommendation_id=recommendation_id,
+            analysis_run_id=analysis_run_id,
+            engine_version=engine_version,
+            dataset_version=dataset_version,
+            verified_skills=verified_skills,
+        )
 
     def get_ml_model_info(self):
         info = self._engine.get_model_info()
