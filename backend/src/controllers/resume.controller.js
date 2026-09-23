@@ -12,13 +12,27 @@ const getMine = asyncHandler(async (req, res) => {
 });
 
 const update = asyncHandler(async (req, res) => {
-  const { phone, summary, institution, graduation_year, experience } = validateResumeUpdate(req.body);
+  const {
+    phone, summary, institution, graduation_year, experience,
+    full_name, headline, location, linkedin_url, github_url, portfolio_url,
+    education, internships, projects, certifications,
+  } = validateResumeUpdate(req.body);
   const resume = await resumeService.updateResume(req.user.id, {
     phone,
     summary,
     institution,
     graduation_year,
     experience_json: experience || [],
+    full_name,
+    headline,
+    location,
+    linkedin_url,
+    github_url,
+    portfolio_url,
+    education_json: education || [],
+    internships_json: internships || [],
+    projects_json: projects || [],
+    certifications_json: certifications || [],
   });
   ok(res, resume);
 });

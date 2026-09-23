@@ -1,10 +1,12 @@
 # Production frontend image for the EC2/Docker Compose deployment
 # (docker-compose.prod.yml). Unlike the local-dev Dockerfile (which uses
 # `serve` on :4173 for local Docker testing), this image serves the
-# static build directly via Nginx on :80 and reverse-proxies /api and
-# /files to the backend container — this IS the "Nginx" component of
-# the AWS architecture (see docs/AWS_ARCHITECTURE.md), not a separate
-# server. Not build-tested in this sandbox (no Docker daemon here).
+# static build directly via Nginx on :80 and reverse-proxies /api to
+# the backend container — this IS the "Nginx" component of the AWS
+# architecture (see docs/AWS_ARCHITECTURE.md), not a separate server.
+# (No /files proxy — see nginx.conf's comment on why that was
+# deliberately removed.) Not build-tested in this sandbox (no Docker
+# daemon here).
 FROM node:20-slim AS build
 WORKDIR /app
 COPY package*.json ./
@@ -26,5 +28,4 @@ FROM nginx:1.27-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost/ || exit 1
-CMD ["nginx", "-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/ || exit 1CMD ["nginx", "-g", "daemon off;"]

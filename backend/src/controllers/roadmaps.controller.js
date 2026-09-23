@@ -12,12 +12,16 @@ const forCareer = asyncHandler(async (req, res) => {
   ok(res, careerService.buildRoadmap(career));
 });
 
-// Personalized roadmap: generic roadmap + this user's current skill gap
-// for the career, so focus_skills reflect what THEY are missing.
+// Personalized roadmap: this user's current skill gap for the career
+// (from the existing, unmodified /skill-gap ML endpoint) layered onto the
+// same roadmap shape buildRoadmap always returns — focus_skills, the
+// "skills to learn" list, and demonstrated_skills all reflect what THIS
+// candidate actually has/is missing. The roadmap never feeds back into
+// recommendations/scoring; it only reads a gap that was already computed
+// for display.
 const personalized = asyncHandler(async (req, res) => {
   const careerName = req.params.career;
   const career = await careerService.getCareerDetail(careerName);
-  const roadmap = careerService.buildRoadmap(career);
 
   const profile = await profileRepository.findByUserId(req.user.id);
   if (!profile) throw new ApiError(422, 'Complete your profile first.');
@@ -34,6 +38,11 @@ const personalized = asyncHandler(async (req, res) => {
     verifiedSkills
   );
 
+  const roadmap = careerService.buildRoadmap(career, gap);
+
+  // your_missing_skills / your_matched_skills kept for backward
+  // compatibility with any existing consumer of this endpoint; the same
+  // data is also now available as demonstrated_skills / skills_to_learn.
   ok(res, { ...roadmap, your_missing_skills: gap.missing_skills, your_matched_skills: gap.matched_skills });
 });
 

@@ -30,6 +30,8 @@ const PATHS = {
   refresh: <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3m.2-3.2v3.6h-3.6" />,
   alert: <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.8v4.7m0 3h.01" /></>,
   sparkle: <path d="M12 4.2 13.6 9 18.4 10.6 13.6 12.2 12 17l-1.6-4.8L5.6 10.6 10.4 9z" />,
+  link: <><path d="M10 14a4.5 4.5 0 0 0 0-6.4l-1.4-1.4a4.5 4.5 0 0 0-6.4 6.4L3.5 14" /><path d="M14 10a4.5 4.5 0 0 0 0 6.4l1.4 1.4a4.5 4.5 0 0 0 6.4-6.4L20.5 10" /></>,
+  briefcase: <><rect x="3" y="7.5" width="18" height="12" rx="1.6" /><path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5M3 13h18" /></>,
 };
 
 export default function Icon({ name, className = '', size, title }) {

@@ -161,11 +161,31 @@ function testAuthSecretValidation() {
     NODE_ENV: 'production',
     AUTH_SECRET: realSecret,
     DATABASE_URL: 'postgres://x/y',
+    // Also required in production now (see the CORS_ALLOWED_ORIGINS
+    // check below) — without this, this "should start cleanly" case
+    // would itself throw.
+    CORS_ALLOWED_ORIGINS: 'https://example.com',
   });
   assert.equal(prod.authSecret, realSecret);
   assert.equal(prod.isProduction, true);
 
+  // Production also refuses to start with no allowed CORS origins
+  // configured — the empty-list fallback used in development would
+  // otherwise silently become wildcard CORS (Access-Control-Allow-Origin: *)
+  // in app.js, contradicting "CORS should not be wildcard in production".
+  assert.throws(
+    () =>
+      loadEnvWith({
+        NODE_ENV: 'production',
+        AUTH_SECRET: realSecret,
+        DATABASE_URL: 'postgres://x/y',
+        CORS_ALLOWED_ORIGINS: '',
+      }),
+    /CORS_ALLOWED_ORIGINS must be set explicitly/
+  );
+
   console.log('  fix 2: production rejects placeholder/short AUTH_SECRET ✓');
+  console.log('  fix 2: production rejects empty CORS_ALLOWED_ORIGINS (wildcard CORS) ✓');
 }
 
 // ---------------------------------------------------------------------

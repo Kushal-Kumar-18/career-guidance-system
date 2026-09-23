@@ -102,11 +102,30 @@ module.exports = {
   s3BucketName: process.env.S3_BUCKET_NAME || '',
   s3PresignedUrlTtlSeconds: parseInt(process.env.S3_PRESIGNED_URL_TTL_SECONDS || '900', 10),
   // Comma-separated allowed origins for CORS in production. Empty in
-  // local dev, where cors() with no options allows any origin.
-  corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean),
+  // local dev, where cors() with no options allows any origin. In
+  // production this MUST be non-empty — an empty list here would make
+  // app.js fall through to cors(undefined), which sets
+  // Access-Control-Allow-Origin: * (see the "CORS should not be
+  // wildcard in production" requirement). Since Nginx is the only
+  // publicly exposed container and the frontend calls the API
+  // same-origin through it, this mainly guards against someone directly
+  // hitting the backend cross-origin if it were ever accidentally
+  // exposed — cheap insurance for a mistake this hard-fail makes
+  // impossible to make silently, same as authSecret above.
+  corsAllowedOrigins: (() => {
+    const origins = (process.env.CORS_ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (isProduction && origins.length === 0) {
+      throw new Error(
+        'CORS_ALLOWED_ORIGINS must be set explicitly when NODE_ENV=production ' +
+          '(comma-separated list of allowed origins, e.g. your EC2 public URL). ' +
+          'Refusing to start with the wide-open CORS fallback used in development.'
+      );
+    }
+    return origins;
+  })(),
   // Rate limiting (middleware/rateLimit.js). Enabled by default; set
   // RATE_LIMIT_ENABLED=false only for local load-testing/debugging.
   rateLimitEnabled: (process.env.RATE_LIMIT_ENABLED || 'true').toLowerCase() !== 'false',

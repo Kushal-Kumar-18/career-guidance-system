@@ -20,6 +20,7 @@ pydantic==2.9.2
 # service still starts fine if this wheel is unavailable.
 psycopg2-binary==2.9.9
 
-# test-only
-pytest==8.3.3
-httpx==0.27.2
+# Test-only packages moved to requirements-dev.txt — the production
+# Docker image (see Dockerfile) installs only this file, so pytest/httpx
+# never ship in the deployed container. Run `pip install -r
+# requirements-dev.txt` locally/in CI to run the test suite.

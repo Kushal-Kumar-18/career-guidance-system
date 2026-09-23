@@ -27,7 +27,6 @@
 # Not build/run-tested against a live EC2 instance in the environment
 # this project was assembled in — validate end-to-end before relying on
 # it (see docs/AWS_SETUP_GUIDE.md "Deploy the application").
-version: '3.9'
 
 services:
   postgres:

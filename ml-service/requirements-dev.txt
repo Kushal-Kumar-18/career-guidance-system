@@ -1,0 +1,10 @@
+# Test-only dependencies — installed on top of requirements.txt for
+# local development and CI, never inside the production Docker image
+# (see Dockerfile, which installs only requirements.txt). Keeping these
+# out of the production image is purely about not shipping unused
+# tooling in the deployed container; neither package has ever been a
+# runtime dependency of app/*.
+-r requirements.txt
+
+pytest==8.3.3
+httpx==0.27.2

@@ -1,5 +1,6 @@
 const mlClient = require('./mlClient');
 const savedCareerRepository = require('../repositories/savedCareerRepository');
+const roadmapService = require('./roadmapService');
 
 async function listCareers(q, limit, offset) {
   const res = await mlClient.listCareers();
@@ -18,59 +19,18 @@ async function getCareerDetail(name) {
   return res.data;
 }
 
-// Deterministic roadmap generator built from the real preserved career
-// data (skills + courses) — see PHASE1_NOTES.md: the legacy roadmap/myth
-// content modules were not included in the handoff, so this is a fresh,
-// documented implementation over real career data rather than a port.
-function buildRoadmap(career) {
-  const skills = career.skills || [];
-  const courses = career.courses || [];
-  const third = Math.max(1, Math.ceil(skills.length / 3));
-
-  const phases = [
-    {
-      phase: 'Foundation',
-      duration: '0-3 months',
-      focus_skills: skills.slice(0, third),
-      milestones: [
-        `Get comfortable with the core concepts behind ${career.name}`,
-        `Complete an introductory course covering ${courses[0] || skills[0] || 'fundamentals'}`,
-      ],
-      resources: courses.slice(0, 2),
-    },
-    {
-      phase: 'Skill Building',
-      duration: '3-6 months',
-      focus_skills: skills.slice(third, third * 2),
-      milestones: [
-        'Build 1-2 small guided projects applying the foundation skills',
-        'Start a portfolio piece that demonstrates practical ability',
-      ],
-      resources: courses.slice(2, 4),
-    },
-    {
-      phase: 'Specialization & Portfolio',
-      duration: '6-12 months',
-      focus_skills: skills.slice(third * 2),
-      milestones: [
-        'Ship one substantial, original project for your portfolio',
-        'Pursue a relevant certification if the field values one',
-        'Start applying / networking in the field',
-      ],
-      resources: courses.slice(4),
-    },
-  ].map((p) => ({ ...p, focus_skills: p.focus_skills.length ? p.focus_skills : skills.slice(0, 3) }));
-
-  return {
-    career: career.name,
-    total_duration: '6-12 months (varies by prior experience)',
-    phases,
-    certifications: career.education || [],
-    projects_suggested: [
-      `A project demonstrating ${skills[0] || 'a core skill'} for ${career.name}`,
-      `A project combining ${skills.slice(0, 2).join(' + ') || 'two core skills'}`,
-    ],
-  };
+// Roadmap generation lives in services/roadmapService.js (see that file
+// for the full design notes: it builds a compact, dynamic career-learning
+// guide from this career's own curated skills/courses/domain plus the
+// reusable skill/topic resource mappings in data/roadmapResources.js —
+// nothing is hardcoded per career, and personalization (when `gap` is
+// passed) is layered on top of the exact same generic shape).
+// Re-exported here (rather than moved) so every existing caller of
+// careerService.buildRoadmap - this file's own buildInvestment/
+// buildWeeklyPlan, careers.controller.js's preview route, and
+// roadmaps.controller.js - keeps working unchanged.
+function buildRoadmap(career, gap) {
+  return roadmapService.buildRoadmap(career, gap);
 }
 
 // Generated "myths vs reality" — templated from job_growth/salary_range so

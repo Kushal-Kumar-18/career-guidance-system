@@ -113,15 +113,27 @@ CREATE TABLE saved_careers (
 CREATE INDEX idx_saved_careers_user ON saved_careers(user_id);
 
 CREATE TABLE resumes (
-    id               SERIAL PRIMARY KEY,
-    user_id          INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    phone            VARCHAR(30),
-    summary          TEXT,
-    institution      TEXT,
-    graduation_year  VARCHAR(10),
-    experience_json  JSONB,
-    ats_score        REAL,
-    last_updated     TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                    SERIAL PRIMARY KEY,
+    user_id               INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    phone                 VARCHAR(30),
+    summary               TEXT,
+    institution           TEXT,               -- legacy single-entry education, kept for back-compat; superseded by education_json
+    graduation_year       VARCHAR(10),         -- legacy single-entry education, kept for back-compat; superseded by education_json
+    experience_json       JSONB,
+    ats_score             REAL,
+    -- Resume Builder personal-info fields (see db/migrations/0008_resume_builder_sections.sql)
+    full_name             TEXT,
+    headline              TEXT,
+    location              TEXT,
+    linkedin_url          TEXT,
+    github_url            TEXT,
+    portfolio_url         TEXT,
+    -- Resume Builder repeatable sections, same JSONB-array convention as experience_json
+    education_json        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    internships_json      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    projects_json         JSONB NOT NULL DEFAULT '[]'::jsonb,
+    certifications_json   JSONB NOT NULL DEFAULT '[]'::jsonb,
+    last_updated          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE game_results (
