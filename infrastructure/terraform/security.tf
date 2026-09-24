@@ -13,7 +13,7 @@ resource "aws_security_group" "app" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "SSH from the operator's IP only"
+    description = "SSH from the operators IP only"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -21,7 +21,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "HTTP — the app's public entry point (Nginx)"
+    description = "HTTP - the apps public entry point (Nginx)"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -29,7 +29,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "HTTPS — reserved for a future TLS cert on Nginx; harmless to leave open even if unused today"
+    description = "HTTPS - reserved for a future TLS cert on Nginx; harmless to leave open even if unused today"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"

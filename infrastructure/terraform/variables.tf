@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "AWS region to deploy into. Free-tier eligibility for EC2/S3 is region-independent, but pick one close to you for latency."
   type        = string
-  default     = "us-east-1"
+  default     = "ap-south-1"
 }
 
 variable "project_name" {

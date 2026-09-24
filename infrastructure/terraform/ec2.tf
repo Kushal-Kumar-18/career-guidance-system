@@ -45,7 +45,7 @@ resource "aws_instance" "app" {
     log_group_name = aws_cloudwatch_log_group.app.name
     aws_region     = var.aws_region
   })
-  user_data_replace_on_change = true
+  user_data_replace_on_change = false
 
   tags = {
     Name = "${var.project_name}-app"
